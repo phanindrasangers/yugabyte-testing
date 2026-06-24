@@ -18,6 +18,8 @@ official dashboard" below).
 | `generate_dashboards.py` | Regenerates both JSON files. Edit panels/queries here, not in the JSON. |
 | `values-monitoring.yaml` | Lean kube-prometheus-stack values (Prometheus + Grafana, k8s control-plane scrapers off). |
 | `yb-servicemonitors.yaml` | Tells Prometheus how to scrape YugabyteDB master/tserver, sets `job`/`env`/`cluster` labels, and controls metric cardinality. |
+| `yb-servicemonitors-multienv.yaml` | Same, but stamps distinct `env` labels (prod, staging) per namespace to simulate several environments from one Prometheus. |
+| `prometheus-scrape-config.yaml` | The same scrape as a raw `scrape_configs` block, for plain Prometheus without the Operator. Produces identical labels, so the dashboards work unchanged. Includes a non-Kubernetes (static_configs) variant. |
 
 ## Deploy (single env, what is running now)
 

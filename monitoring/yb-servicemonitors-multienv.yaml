@@ -5,7 +5,6 @@
 #
 # Pattern repeats the yb-master/yb-tserver pair for each (namespace, env). The only
 # differences per env are namespaceSelector.matchNames and the env replacement.
-{{ range $ns, $env := dict }}{{ end }}
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor

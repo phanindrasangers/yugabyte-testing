@@ -1,0 +1,109 @@
+# ---------------------------------------------------------------------------
+# Raw Prometheus scrape config for YugabyteDB (alternative to ServiceMonitors)
+# ---------------------------------------------------------------------------
+# Use this when you run a plain Prometheus (prometheus.yml) instead of the
+# Prometheus Operator. It produces the SAME labels the Grafana dashboards need,
+# so dashboards/*.json work unchanged.
+#
+# Labels the dashboards rely on, and where each comes from here:
+#   job        -> the job_name itself ("yb-master" / "yb-tserver"). No relabel needed.
+#   env        -> hardcoded target_label per scrape config. Set per environment.
+#   cluster    -> hardcoded target_label.
+#   namespace  -> __meta_kubernetes_namespace (k8s SD) or a constant label (static).
+#   pod        -> __meta_kubernetes_pod_name (k8s SD) or derived from __address__.
+# The YB-intrinsic labels (exported_instance, metric_type, metric_id) are already
+# in the metrics text, so they are not relabeled.
+#
+# IMPORTANT: do NOT rely on global external_labels for env/cluster. Those are only
+# attached on remote_write / federation, never on locally-queried series, so the
+# Grafana env dropdown would be empty. Stamp env/cluster as target_label as below.
+#
+# Load it:
+#   * vanilla Prometheus  -> paste the scrape_configs list into prometheus.yml
+#   * kube-prometheus-stack -> put this in a secret and set
+#       prometheus.prometheusSpec.additionalScrapeConfigs:
+#         name: yb-additional-scrape-configs
+#         key: yb-scrape.yaml
+#     e.g. kubectl -n monitoring create secret generic yb-additional-scrape-configs \
+#            --from-file=yb-scrape.yaml=monitoring/prometheus-scrape-config.yaml
+#     (strip everything except the scrape_configs list for the secret form)
+
+scrape_configs:
+
+  # ----- masters: http-ui port 7000 -----
+  - job_name: yb-master                      # becomes job="yb-master"
+    metrics_path: /prometheus-metrics
+    kubernetes_sd_configs:
+      - role: endpoints
+    relabel_configs:
+      # keep only the yb-masters service / http-ui port, in your YB namespaces
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        separator: ";"
+        regex: (yb-demo|yb-prod|yb-staging);yb-masters;http-ui
+        action: keep
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - target_label: env
+        replacement: dev
+      - target_label: cluster
+        replacement: kind-dev
+    metric_relabel_configs:
+      # cardinality: keep server + cluster + synthetic (up), plus an allowlist of
+      # tablet-scoped storage metrics the dashboards aggregate. Drop the rest.
+      - source_labels: [metric_type, __name__]
+        separator: ";"
+        regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
+        action: keep
+
+  # ----- tservers: http-ui 9000 (server/rocksdb) + http-ysql-met 13000 (SQLProcessor) -----
+  - job_name: yb-tserver                     # becomes job="yb-tserver"
+    metrics_path: /prometheus-metrics
+    kubernetes_sd_configs:
+      - role: endpoints
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        separator: ";"
+        regex: (yb-demo|yb-prod|yb-staging);yb-tservers;(http-ui|http-ysql-met)
+        action: keep
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - target_label: env
+        replacement: dev
+      - target_label: cluster
+        replacement: kind-dev
+    metric_relabel_configs:
+      - source_labels: [metric_type, __name__]
+        separator: ";"
+        regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
+        action: keep
+
+# ---------------------------------------------------------------------------
+# Variant: non-Kubernetes targets (VMs / bare metal, no service discovery).
+# There is no namespace/pod, so attach them as constant labels per target group
+# and point at the YB ports directly. One block per environment.
+# ---------------------------------------------------------------------------
+#  - job_name: yb-master
+#    metrics_path: /prometheus-metrics
+#    static_configs:
+#      - targets: ['10.0.0.1:7000', '10.0.0.2:7000', '10.0.0.3:7000']
+#        labels: {env: prod, cluster: dc1, namespace: yb-prod}
+#    relabel_configs:
+#      - source_labels: [__address__]
+#        target_label: pod          # host:port stands in for pod when there is no SD
+#    metric_relabel_configs:
+#      - source_labels: [metric_type, __name__]
+#        separator: ";"
+#        regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
+#        action: keep
+#  - job_name: yb-tserver
+#    metrics_path: /prometheus-metrics
+#    static_configs:
+#      - targets: ['10.0.0.1:9000','10.0.0.1:13000','10.0.0.2:9000','10.0.0.2:13000']
+#        labels: {env: prod, cluster: dc1, namespace: yb-prod}
+#    relabel_configs:
+#      - source_labels: [__address__]
+#        target_label: pod
