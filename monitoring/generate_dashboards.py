@@ -254,13 +254,15 @@ def build_fleet():
         (stat("Namespaces with YB",
               "count(count by (env,namespace)(server_uptime_ms%s))" % NSEL, "none"),
          3, 4),
-        (stat("Masters Up", "sum(up%s)" % MAST, "none",
+        # up is deduped per pod (max by pod) because tservers are scraped on two
+        # endpoints (:9000 and :13000); a plain sum(up) would double-count them.
+        (stat("Masters Up", "sum(max by (env,namespace,pod)(up%s))" % MAST, "none",
               color_mode="value"), 3, 4),
-        (stat("Masters Down", "sum(up%s == bool 0)" % MAST, "none",
+        (stat("Masters Down", "sum(max by (env,namespace,pod)(up%s) == bool 0)" % MAST, "none",
               thresholds=[{"color": "green", "value": None},
                           {"color": "red", "value": 1}]), 3, 4),
-        (stat("TServers Up", "sum(up%s)" % TSRV, "none"), 3, 4),
-        (stat("TServers Down", "sum(up%s == bool 0)" % TSRV, "none",
+        (stat("TServers Up", "sum(max by (env,namespace,pod)(up%s))" % TSRV, "none"), 3, 4),
+        (stat("TServers Down", "sum(max by (env,namespace,pod)(up%s) == bool 0)" % TSRV, "none",
               thresholds=[{"color": "green", "value": None},
                           {"color": "red", "value": 1}]), 3, 4),
         (stat("Live TServers (cluster view)", live, "none"), 3, 4),
@@ -292,9 +294,9 @@ def build_fleet():
 
         ("row", "Per environment / namespace status"),
         (table("YugabyteDB instances by env / namespace", [
-            target('sum by (env,namespace)(up{job="yb-master",%s,%s})' % (F_ENV, F_NS),
+            target('sum by (env,namespace)(max by (env,namespace,pod)(up{job="yb-master",%s,%s}))' % (F_ENV, F_NS),
                    "Masters Up", instant=True, ref="A"),
-            target('sum by (env,namespace)(up{job="yb-tserver",%s,%s})' % (F_ENV, F_NS),
+            target('sum by (env,namespace)(max by (env,namespace,pod)(up{job="yb-tserver",%s,%s}))' % (F_ENV, F_NS),
                    "TServers Up", instant=True, ref="B"),
             target('sum by (env,namespace)(num_tablet_servers_live%s)' % NSEL,
                    "Live TServers", instant=True, ref="C"),
@@ -339,8 +341,9 @@ def build_env_detail():
 
     items = [
         ("row", "Cluster health"),
-        (stat("Masters Up", "sum(up%s)" % M, "none"), 4, 4),
-        (stat("TServers Up", "sum(up%s)" % T, "none"), 4, 4),
+        # dedupe up per pod: tservers expose two scrape endpoints (:9000, :13000)
+        (stat("Masters Up", "sum(max by (env,namespace,pod)(up%s))" % M, "none"), 4, 4),
+        (stat("TServers Up", "sum(max by (env,namespace,pod)(up%s))" % T, "none"), 4, 4),
         (stat("Live TServers", "sum(num_tablet_servers_live%s)" % C, "none"), 4, 4),
         (stat("Dead TServers", "sum(num_tablet_servers_dead%s)" % C, "none",
               thresholds=[{"color": "green", "value": None},
@@ -433,15 +436,22 @@ def wrap_for_provisioning(dash):
     return dash
 
 
+# Also publish into the Helm chart so the chart and the loose JSON stay in sync.
+CHART_FILES = os.path.join(os.path.dirname(__file__), "charts",
+                           "yugabyte-grafana-dashboards", "files", "dashboards")
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
+    os.makedirs(CHART_FILES, exist_ok=True)
     for name, builder in [("yb-fleet-overview", build_fleet),
                           ("yb-env-detail", build_env_detail)]:
         d = builder()
-        path = os.path.join(OUT, name + ".json")
-        with open(path, "w") as f:
-            json.dump(d, f, indent=2)
-        print("wrote", path, "panels:",
+        blob = json.dumps(d, indent=2)
+        for base in (OUT, CHART_FILES):
+            with open(os.path.join(base, name + ".json"), "w") as f:
+                f.write(blob)
+        print("wrote", name, "panels:",
               len([p for p in d["panels"] if p.get("type") != "row"]))
 
 

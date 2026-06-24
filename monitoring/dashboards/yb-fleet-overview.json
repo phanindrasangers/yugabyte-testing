@@ -228,7 +228,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(up{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\"})",
+          "expr": "sum(max by (env,namespace,pod)(up{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\"}))",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -284,7 +284,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(up{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\"} == bool 0)",
+          "expr": "sum(max by (env,namespace,pod)(up{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\"}) == bool 0)",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -344,7 +344,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(up{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\"})",
+          "expr": "sum(max by (env,namespace,pod)(up{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\"}))",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -400,7 +400,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(up{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\"} == bool 0)",
+          "expr": "sum(max by (env,namespace,pod)(up{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\"}) == bool 0)",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -853,7 +853,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (env,namespace)(up{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\"})",
+          "expr": "sum by (env,namespace)(max by (env,namespace,pod)(up{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\"}))",
           "legendFormat": "Masters Up",
           "instant": true,
           "range": false,
@@ -864,7 +864,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (env,namespace)(up{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\"})",
+          "expr": "sum by (env,namespace)(max by (env,namespace,pod)(up{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\"}))",
           "legendFormat": "TServers Up",
           "instant": true,
           "range": false,

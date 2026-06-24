@@ -134,7 +134,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(up{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"})",
+          "expr": "sum(max by (env,namespace,pod)(up{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}))",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -190,7 +190,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(up{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"})",
+          "expr": "sum(max by (env,namespace,pod)(up{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}))",
           "legendFormat": "",
           "instant": true,
           "range": false,

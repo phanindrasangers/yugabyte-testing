@@ -1,0 +1,43 @@
+# Default values for yugabyte-grafana-dashboards.
+# This chart creates one ConfigMap per dashboard, labelled so the Grafana sidecar
+# imports it. It does not deploy Grafana itself.
+
+# -- How the Grafana dashboard sidecar discovers ConfigMaps. Must match your
+# Grafana install (kube-prometheus-stack default is label "grafana_dashboard").
+sidecar:
+  label: grafana_dashboard
+  labelValue: "1"
+
+# -- Grafana folder the dashboards are filed under, applied via folderAnnotation.
+# Set folder to "" to use Grafana's General folder.
+folder: YugabyteDB
+folderAnnotation: grafana_folder
+
+# -- Namespace for the ConfigMaps. Empty means the release namespace. The Grafana
+# sidecar must be configured with searchNamespace ALL (or this namespace) to see them.
+namespaceOverride: ""
+
+# -- Optionally hard-wire a Prometheus data source. The shipped dashboards use a
+# `${datasource}` template variable so users pick the source at view time. If you set
+# uid here, every `${datasource}` reference is replaced with this uid at install time,
+# pinning the dashboards to one data source.
+datasource:
+  uid: ""
+
+# -- Extra labels / annotations added to every ConfigMap.
+commonLabels: {}
+commonAnnotations: {}
+
+# -- Per-dashboard controls. Dashboards are auto-discovered from
+# files/dashboards/*.json; the key is the file name without .json. Anything not
+# listed here is enabled by default. Use this to disable one or override its folder.
+dashboards:
+  yb-fleet-overview:
+    enabled: true
+    # folder: ""        # override the global folder for just this dashboard
+  yb-env-detail:
+    enabled: true
+
+# -- Override chart name pieces if you must.
+nameOverride: ""
+fullnameOverride: ""
