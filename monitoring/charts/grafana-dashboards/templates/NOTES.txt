@@ -1,0 +1,18 @@
+{{ .Chart.Name }} {{ .Chart.Version }} installed as "{{ .Release.Name }}" in namespace {{ include "gdash.namespace" . }}.
+
+Onboarded dashboards (ConfigMaps labelled {{ .Values.sidecar.label }}={{ .Values.sidecar.labelValue | quote }}):
+{{- range $path, $bytes := .Files.Glob "files/dashboards/*/*.json" }}
+{{- $folderKey := base (dir $path) }}
+{{- $name := trimSuffix ".json" (base $path) }}
+{{- if include "gdash.enabled" (dict "root" $ "folderKey" $folderKey "name" $name) }}
+  - [{{ $folderKey }}] {{ $name }}
+{{- end }}
+{{- end }}
+{{- range $d := .Values.extraDashboards }}
+  - [{{ $d.folder | default $.Values.defaultFolder }}] {{ $d.name }} (inline)
+{{- end }}
+
+Verify:
+  kubectl get configmap -n {{ include "gdash.namespace" . }} -l {{ .Values.sidecar.label }}={{ .Values.sidecar.labelValue }}
+
+Add a new component: drop its JSON under files/dashboards/<Folder>/ and `helm upgrade`.

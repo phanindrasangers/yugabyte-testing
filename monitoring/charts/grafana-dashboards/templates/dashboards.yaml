@@ -1,0 +1,34 @@
+{{- /*
+File-based dashboards. Two layouts are supported:
+  files/dashboards/<Folder>/<name>.json  -> Grafana folder = <Folder>
+  files/dashboards/<name>.json           -> Grafana folder = .Values.defaultFolder
+Drop a JSON in (or under) files/dashboards/ and it is onboarded automatically.
+The `---` document separator is emitted here, one per enabled dashboard.
+*/ -}}
+{{- $root := . -}}
+
+{{- /* component folders: one level deep */ -}}
+{{- range $path, $bytes := .Files.Glob "files/dashboards/*/*.json" }}
+{{- $folderKey := base (dir $path) }}
+{{- $name := trimSuffix ".json" (base $path) }}
+{{- if include "gdash.enabled" (dict "root" $root "folderKey" $folderKey "name" $name) }}
+---
+{{ include "gdash.configmap" (dict "root" $root "folderKey" $folderKey "name" $name "file" (base $path) "content" ($root.Files.Get $path)) }}
+{{- end }}
+{{- end }}
+
+{{- /* root-level dashboards -> defaultFolder */ -}}
+{{- range $path, $bytes := .Files.Glob "files/dashboards/*.json" }}
+{{- $folderKey := $root.Values.defaultFolder }}
+{{- $name := trimSuffix ".json" (base $path) }}
+{{- if include "gdash.enabled" (dict "root" $root "folderKey" $folderKey "name" $name) }}
+---
+{{ include "gdash.configmap" (dict "root" $root "folderKey" $folderKey "name" $name "file" (base $path) "content" ($root.Files.Get $path)) }}
+{{- end }}
+{{- end }}
+
+{{- /* inline dashboards from values.extraDashboards */ -}}
+{{- range $d := .Values.extraDashboards }}
+---
+{{ include "gdash.configmap" (dict "root" $root "folderKey" ($d.folder | default $root.Values.defaultFolder) "name" $d.name "file" (printf "%s.json" $d.name) "content" $d.json) }}
+{{- end }}

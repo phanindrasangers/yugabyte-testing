@@ -429,6 +429,47 @@ def build_env_detail():
     return d
 
 
+# ====================================================== PLATFORM DASH ====
+# Component-agnostic dashboard, proves the chart is not YugabyteDB-specific.
+# Uses metrics every Prometheus scrape has: up, scrape_duration_seconds, and
+# Prometheus' own TSDB metrics.
+
+def build_platform():
+    variables = [
+        var_datasource(),
+        var_query("job", "Job", "label_values(up, job)", multi=True, all_=True),
+    ]
+    d = base_dashboard("platform-prometheus-targets",
+                       "Platform · Prometheus Targets & Scrape Health",
+                       variables, ["platform", "prometheus"], refresh="30s")
+    J = '{job=~"$job"}'
+    items = [
+        ("row", "Scrape targets"),
+        (stat("Targets Up", "sum(up%s)" % J, "none"), 4, 4),
+        (stat("Targets Down", "sum(up%s == bool 0)" % J, "none",
+              thresholds=[{"color": "green", "value": None},
+                          {"color": "red", "value": 1}]), 4, 4),
+        (stat("Jobs", "count(count by (job)(up%s))" % J, "none"), 4, 4),
+        (stat("Max scrape duration", "max(scrape_duration_seconds%s)" % J, "s"), 4, 4),
+        (timeseries("Targets up by job", targets(
+            ("sum by (job)(up%s)" % J, "{{job}}")), unit="none", legend_table=True), 12, 8),
+        (timeseries("Scrape duration by job (avg)", targets(
+            ("avg by (job)(scrape_duration_seconds%s)" % J, "{{job}}")), unit="s",
+            legend_table=True), 12, 8),
+        ("row", "Prometheus server"),
+        (timeseries("TSDB head series", targets(
+            ("prometheus_tsdb_head_series", "series")), unit="short"), 8, 7),
+        (timeseries("Samples ingested/sec", targets(
+            ("rate(prometheus_tsdb_head_samples_appended_total[5m])", "samples/s")),
+            unit="cps"), 8, 7),
+        (timeseries("Prometheus memory (RSS)", targets(
+            ("process_resident_memory_bytes{job=~\".*prometheus.*\"}", "{{pod}}")),
+            unit="bytes"), 8, 7),
+    ]
+    layout(d, items)
+    return d
+
+
 # ----------------------------------------------------------------- main ----
 
 def wrap_for_provisioning(dash):
@@ -436,23 +477,29 @@ def wrap_for_provisioning(dash):
     return dash
 
 
-# Also publish into the Helm chart so the chart and the loose JSON stay in sync.
-CHART_FILES = os.path.join(os.path.dirname(__file__), "charts",
-                           "yugabyte-grafana-dashboards", "files", "dashboards")
+# Publish into the generic grafana-dashboards chart, organised by component folder.
+CHART_ROOT = os.path.join(os.path.dirname(__file__), "charts",
+                          "grafana-dashboards", "files", "dashboards")
+
+
+def write_dashboard(d, name, folder):
+    """Write JSON to monitoring/dashboards/ (flat) and into the chart under <folder>/."""
+    blob = json.dumps(d, indent=2)
+    os.makedirs(OUT, exist_ok=True)
+    with open(os.path.join(OUT, name + ".json"), "w") as f:
+        f.write(blob)
+    chart_dir = os.path.join(CHART_ROOT, folder)
+    os.makedirs(chart_dir, exist_ok=True)
+    with open(os.path.join(chart_dir, name + ".json"), "w") as f:
+        f.write(blob)
+    print("wrote [%s] %s  panels: %d" %
+          (folder, name, len([p for p in d["panels"] if p.get("type") != "row"])))
 
 
 def main():
-    os.makedirs(OUT, exist_ok=True)
-    os.makedirs(CHART_FILES, exist_ok=True)
-    for name, builder in [("yb-fleet-overview", build_fleet),
-                          ("yb-env-detail", build_env_detail)]:
-        d = builder()
-        blob = json.dumps(d, indent=2)
-        for base in (OUT, CHART_FILES):
-            with open(os.path.join(base, name + ".json"), "w") as f:
-                f.write(blob)
-        print("wrote", name, "panels:",
-              len([p for p in d["panels"] if p.get("type") != "row"]))
+    write_dashboard(build_fleet(), "yb-fleet-overview", "YugabyteDB")
+    write_dashboard(build_env_detail(), "yb-env-detail", "YugabyteDB")
+    write_dashboard(build_platform(), "prometheus-targets", "Platform")
 
 
 if __name__ == "__main__":

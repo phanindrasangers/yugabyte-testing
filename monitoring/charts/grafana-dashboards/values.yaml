@@ -1,0 +1,57 @@
+# grafana-dashboards: onboard Grafana dashboards for ANY component as code.
+#
+# Layout convention (the chart's whole idea):
+#   files/dashboards/<Folder>/<dashboard>.json   -> imported into Grafana folder <Folder>
+#   files/dashboards/<dashboard>.json            -> imported into `defaultFolder`
+#
+# Drop a JSON in a subdirectory and it is onboarded. The subdirectory name is the
+# Grafana folder. Group by component: YugabyteDB/, Kubernetes/, PostgreSQL/, Kafka/...
+# The chart creates one ConfigMap per dashboard, labelled for the Grafana sidecar.
+# It does NOT install Grafana.
+
+# -- Grafana sidecar discovery. Match your Grafana install.
+sidecar:
+  label: grafana_dashboard
+  labelValue: "1"
+
+# -- Annotation the sidecar reads to decide the folder.
+folderAnnotation: grafana_folder
+
+# -- Folder for dashboards placed at files/dashboards/ root (no subdirectory).
+defaultFolder: General
+
+# -- Namespace for the ConfigMaps. Empty means the release namespace. The Grafana
+# sidecar must watch this namespace (searchNamespace: ALL).
+namespaceOverride: ""
+
+# -- Global data source pin. Dashboards ship with a `${datasource}` template variable
+# so viewers choose at runtime. Set uid to replace it everywhere at install time.
+# Can be overridden per folder (folders.<name>.datasourceUid).
+datasource:
+  uid: ""
+
+# -- Added to every ConfigMap.
+commonLabels: {}
+commonAnnotations: {}
+
+# -- Per-folder (per-component) controls. Keys are the subdirectory names under
+# files/dashboards/. Everything not listed is enabled with sensible defaults.
+folders:
+  YugabyteDB:
+    enabled: true
+    # folder: "YugabyteDB"        # display name override (defaults to the key)
+    # datasourceUid: ""           # pin a data source for just this component
+    dashboards: {}                # per-dashboard: {<name>: {enabled: false}}
+  Platform:
+    enabled: true
+
+# -- Inline / external dashboards supplied directly through values, no file needed.
+# Handy for vendored community dashboards or per-environment generated JSON.
+extraDashboards: []
+  # - name: node-exporter-full
+  #   folder: Kubernetes
+  #   json: |-
+  #     { "title": "Node Exporter", ... }
+
+nameOverride: ""
+fullnameOverride: ""
