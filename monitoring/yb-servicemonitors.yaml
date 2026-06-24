@@ -35,10 +35,14 @@ spec:
         - targetLabel: cluster
           replacement: kind-dev
       metricRelabelings:
-        # keep cardinality sane: drop per-table/tablet series, keep server + cluster
-        - sourceLabels: [metric_type]
-          regex: "(table|tablet)"
-          action: drop
+        # Cardinality control. Keep server + cluster metrics and synthetic series
+        # (up, scrape_*, empty metric_type), plus a small allowlist of tablet-scoped
+        # storage metrics that the dashboards aggregate. Drop per-table rollups and
+        # all other per-tablet series, which explode on large clusters.
+        - sourceLabels: [metric_type, __name__]
+          separator: ";"
+          regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
+          action: keep
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor

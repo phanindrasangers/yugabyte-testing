@@ -1,0 +1,110 @@
+# Extra environments for verifying the central dashboard. Each namespace is stamped
+# with a different env label so the fleet dashboard shows multiple environments from
+# a single Prometheus. In a real deployment each env is its own cluster/Prometheus;
+# here we simulate N envs by relabeling per namespace.
+#
+# Pattern repeats the yb-master/yb-tserver pair for each (namespace, env). The only
+# differences per env are namespaceSelector.matchNames and the env replacement.
+{{ range $ns, $env := dict }}{{ end }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: yb-master-prod
+  labels: {app.kubernetes.io/part-of: yugabytedb}
+spec:
+  namespaceSelector: {matchNames: [yb-prod]}
+  selector: {matchLabels: {app: yb-master}}
+  endpoints:
+    - port: http-ui
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - {targetLabel: job, replacement: yb-master}
+        - {targetLabel: env, replacement: prod}
+        - {targetLabel: cluster, replacement: kind-prod}
+      metricRelabelings:
+        - sourceLabels: [metric_type, __name__]
+          separator: ";"
+          regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
+          action: keep
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: yb-tserver-prod
+  labels: {app.kubernetes.io/part-of: yugabytedb}
+spec:
+  namespaceSelector: {matchNames: [yb-prod]}
+  selector: {matchLabels: {app: yb-tserver}}
+  endpoints:
+    - port: http-ui
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - {targetLabel: job, replacement: yb-tserver}
+        - {targetLabel: env, replacement: prod}
+        - {targetLabel: cluster, replacement: kind-prod}
+      metricRelabelings:
+        - sourceLabels: [metric_type, __name__]
+          separator: ";"
+          regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
+          action: keep
+    - port: http-ysql-met
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - {targetLabel: job, replacement: yb-tserver}
+        - {targetLabel: env, replacement: prod}
+        - {targetLabel: cluster, replacement: kind-prod}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: yb-master-staging
+  labels: {app.kubernetes.io/part-of: yugabytedb}
+spec:
+  namespaceSelector: {matchNames: [yb-staging]}
+  selector: {matchLabels: {app: yb-master}}
+  endpoints:
+    - port: http-ui
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - {targetLabel: job, replacement: yb-master}
+        - {targetLabel: env, replacement: staging}
+        - {targetLabel: cluster, replacement: kind-staging}
+      metricRelabelings:
+        - sourceLabels: [metric_type, __name__]
+          separator: ";"
+          regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
+          action: keep
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: yb-tserver-staging
+  labels: {app.kubernetes.io/part-of: yugabytedb}
+spec:
+  namespaceSelector: {matchNames: [yb-staging]}
+  selector: {matchLabels: {app: yb-tserver}}
+  endpoints:
+    - port: http-ui
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - {targetLabel: job, replacement: yb-tserver}
+        - {targetLabel: env, replacement: staging}
+        - {targetLabel: cluster, replacement: kind-staging}
+      metricRelabelings:
+        - sourceLabels: [metric_type, __name__]
+          separator: ";"
+          regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
+          action: keep
+    - port: http-ysql-met
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - {targetLabel: job, replacement: yb-tserver}
+        - {targetLabel: env, replacement: staging}
+        - {targetLabel: cluster, replacement: kind-staging}
