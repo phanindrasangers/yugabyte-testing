@@ -1,0 +1,80 @@
+# Lean kube-prometheus-stack values for monitoring YugabyteDB on kind.
+# Strips the k8s control-plane scrapers we don't need and focuses Prometheus +
+# Grafana on YugabyteDB. For a real environment, keep node-exporter/kube-state.
+
+# --- turn off everything not needed to watch YugabyteDB ---
+defaultRules:
+  create: false
+alertmanager:
+  enabled: false
+nodeExporter:
+  enabled: false
+kubeStateMetrics:
+  enabled: false
+kubeApiServer:
+  enabled: false
+kubelet:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+coreDns:
+  enabled: false
+kubeDns:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    retention: 2d
+    # env / cluster identity for this Prometheus. In a real multi-env setup you
+    # run one stack per environment and change these, then either remote_write to
+    # a central Prometheus/Thanos or add each as a Grafana data source.
+    externalLabels:
+      env: dev
+      cluster: kind-dev
+    # pick up ServiceMonitors that are NOT labelled with this release
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+
+grafana:
+  adminPassword: admin   # demo only; change / use a secret in real use
+  defaultDashboardsEnabled: false
+  service:
+    type: ClusterIP
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+      folder: /tmp/dashboards
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
+    datasources:
+      enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi

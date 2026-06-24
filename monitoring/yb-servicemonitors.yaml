@@ -1,0 +1,80 @@
+# ServiceMonitors that tell Prometheus how to scrape YugabyteDB.
+# Apply one pair PER namespace that runs YugabyteDB, or use namespaceSelector
+# (below) to cover several namespaces with one ServiceMonitor.
+#
+# Labels added by these scrapes: job ("yb-master"/"yb-tserver"), namespace, pod,
+# service, plus the env/cluster external labels from the Prometheus config.
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: yb-master
+  labels:
+    app.kubernetes.io/part-of: yugabytedb
+spec:
+  namespaceSelector:
+    # list every namespace running YugabyteDB, or use matchLabels for a class of ns
+    matchNames:
+      - yb-demo
+  selector:
+    matchLabels:
+      app: yb-master
+  endpoints:
+    - port: http-ui                 # 7000
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - targetLabel: job
+          replacement: yb-master
+        # Identity of THIS environment/cluster, stamped onto every series so the
+        # Grafana `env` dropdown works on local queries. external_labels alone are
+        # NOT stored locally (only added on remote_write/federation), so we stamp
+        # here too. Set these per environment.
+        - targetLabel: env
+          replacement: dev
+        - targetLabel: cluster
+          replacement: kind-dev
+      metricRelabelings:
+        # keep cardinality sane: drop per-table/tablet series, keep server + cluster
+        - sourceLabels: [metric_type]
+          regex: "(table|tablet)"
+          action: drop
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: yb-tserver
+  labels:
+    app.kubernetes.io/part-of: yugabytedb
+spec:
+  namespaceSelector:
+    matchNames:
+      - yb-demo
+  selector:
+    matchLabels:
+      app: yb-tserver
+  endpoints:
+    - port: http-ui                 # 9000  server + rocksdb + tserver RPC metrics
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - targetLabel: job
+          replacement: yb-tserver
+        - targetLabel: env
+          replacement: dev
+        - targetLabel: cluster
+          replacement: kind-dev
+      metricRelabelings:
+        - sourceLabels: [metric_type]
+          regex: "(table|tablet)"
+          action: drop
+    - port: http-ysql-met           # 13000 YSQL SQLProcessor metrics
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - targetLabel: job
+          replacement: yb-tserver
+        - targetLabel: env
+          replacement: dev
+        - targetLabel: cluster
+          replacement: kind-dev

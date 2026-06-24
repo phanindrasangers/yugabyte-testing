@@ -1,0 +1,39 @@
+# Repro values for single-node kind cluster (YugabyteDB 2024.1.2)
+# Goal: start with 1 master / 1 tserver, then scale to 3/3 to trigger
+# the master Raft-quorum / UUID-mismatch failure.
+
+# Start small. We bump these to 3 on the second `helm upgrade`.
+replicas:
+  master: 3
+  tserver: 3
+  totalMasters: 3   # only used by the multi-cluster path; kept consistent
+
+# Keep everything on one node, tiny footprint.
+resource:
+  master:
+    requests:
+      cpu: "0.3"
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  tserver:
+    requests:
+      cpu: "0.3"
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+storage:
+  master:
+    count: 1
+    size: 1Gi
+    storageClass: standard
+  tserver:
+    count: 1
+    size: 1Gi
+    storageClass: standard
+
+# kind has no cloud LoadBalancer; keep services as ClusterIP so nothing hangs Pending.
+enableLoadBalancer: false
