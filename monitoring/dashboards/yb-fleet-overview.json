@@ -1,6 +1,6 @@
 {
   "uid": "yb-fleet-overview",
-  "title": "YugabyteDB \u00b7 Fleet Overview (All Environments)",
+  "title": "YugabyteDB \u00b7 Fleet Overview (All vClusters / Environments)",
   "tags": [
     "yugabytedb",
     "fleet"
@@ -31,14 +31,33 @@
       },
       {
         "type": "query",
+        "name": "vcluster",
+        "label": "vCluster",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": "label_values(up{job=~\"yb.*\"}, vcluster)",
+        "definition": "label_values(up{job=~\"yb.*\"}, vcluster)",
+        "refresh": 2,
+        "sort": 1,
+        "hide": 0,
+        "multi": true,
+        "includeAll": true,
+        "current": {},
+        "regex": "",
+        "allValue": ".*"
+      },
+      {
+        "type": "query",
         "name": "env",
         "label": "Environment",
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "query": "label_values(server_uptime_ms, env)",
-        "definition": "label_values(server_uptime_ms, env)",
+        "query": "label_values(up{job=~\"yb.*\",vcluster=~\"$vcluster\"}, env)",
+        "definition": "label_values(up{job=~\"yb.*\",vcluster=~\"$vcluster\"}, env)",
         "refresh": 2,
         "sort": 1,
         "hide": 0,
@@ -56,8 +75,8 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "query": "label_values(server_uptime_ms{env=~\"$env\"}, namespace)",
-        "definition": "label_values(server_uptime_ms{env=~\"$env\"}, namespace)",
+        "query": "label_values(up{job=~\"yb.*\",vcluster=~\"$vcluster\",env=~\"$env\"}, namespace)",
+        "definition": "label_values(up{job=~\"yb.*\",vcluster=~\"$vcluster\",env=~\"$env\"}, namespace)",
         "refresh": 2,
         "sort": 1,
         "hide": 0,
@@ -99,7 +118,7 @@
     },
     {
       "type": "stat",
-      "title": "Environments",
+      "title": "vClusters",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -116,7 +135,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "count(count by (env)(server_uptime_ms{env=~\"$env\"}))",
+          "expr": "count(count by (vcluster)(up{job=\"yb-master\",vcluster!=\"\",env=~\"$env\",namespace=~\"$namespace\"}))",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -155,7 +174,7 @@
     },
     {
       "type": "stat",
-      "title": "Namespaces with YB",
+      "title": "Environments",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -172,7 +191,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "count(count by (env,namespace)(server_uptime_ms{env=~\"$env\",namespace=~\"$namespace\"}))",
+          "expr": "count(count by (env)(up{job=\"yb-master\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}))",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -211,7 +230,7 @@
     },
     {
       "type": "stat",
-      "title": "Masters Up",
+      "title": "Namespaces with YB",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -228,7 +247,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(max by (env,namespace,pod)(up{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\"}))",
+          "expr": "count(count by (env,namespace)(up{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}))",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -267,7 +286,7 @@
     },
     {
       "type": "stat",
-      "title": "Masters Down",
+      "title": "Masters Up",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -284,7 +303,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(max by (env,namespace,pod)(up{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\"}) == bool 0)",
+          "expr": "sum(max by (vcluster,env,namespace,pod)(up{job=\"yb-master\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}))",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -313,10 +332,6 @@
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
               }
             ]
           }
@@ -327,7 +342,7 @@
     },
     {
       "type": "stat",
-      "title": "TServers Up",
+      "title": "Masters Down",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -344,7 +359,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(max by (env,namespace,pod)(up{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\"}))",
+          "expr": "sum(max by (vcluster,env,namespace,pod)(up{job=\"yb-master\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}) == bool 0)",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -373,6 +388,10 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
               }
             ]
           }
@@ -383,7 +402,7 @@
     },
     {
       "type": "stat",
-      "title": "TServers Down",
+      "title": "TServers Up",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -400,7 +419,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(max by (env,namespace,pod)(up{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\"}) == bool 0)",
+          "expr": "sum(max by (vcluster,env,namespace,pod)(up{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}))",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -429,10 +448,6 @@
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
               }
             ]
           }
@@ -443,7 +458,7 @@
     },
     {
       "type": "stat",
-      "title": "Live TServers (cluster view)",
+      "title": "TServers Down",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -460,63 +475,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(num_tablet_servers_live{env=~\"$env\",namespace=~\"$namespace\"})",
-          "legendFormat": "",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "textMode": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "id": 8
-    },
-    {
-      "type": "stat",
-      "title": "Dead TServers (cluster view)",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "gridPos": {
-        "x": 21,
-        "y": 1,
-        "w": 3,
-        "h": 4
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "expr": "sum(num_tablet_servers_dead{env=~\"$env\",namespace=~\"$namespace\"})",
+          "expr": "sum(max by (vcluster,env,namespace,pod)(up{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}) == bool 0)",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -555,11 +514,67 @@
         },
         "overrides": []
       },
+      "id": 8
+    },
+    {
+      "type": "stat",
+      "title": "Live TServers (cluster)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 21,
+        "y": 1,
+        "w": 3,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(num_tablet_servers_live{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"})",
+          "legendFormat": "",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
       "id": 9
     },
     {
       "type": "row",
-      "title": "Throughput across environments",
+      "title": "Throughput across vClusters / environments",
       "collapsed": false,
       "gridPos": {
         "x": 0,
@@ -571,7 +586,7 @@
     },
     {
       "type": "timeseries",
-      "title": "YSQL Ops/sec by environment",
+      "title": "YSQL Ops/sec by env",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -589,8 +604,8 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (env) (rate(handler_latency_yb_ysqlserver_SQLProcessor_SelectStmt_count{env=~\"$env\",namespace=~\"$namespace\"}[5m]) + rate(handler_latency_yb_ysqlserver_SQLProcessor_InsertStmt_count{env=~\"$env\",namespace=~\"$namespace\"}[5m]) + rate(handler_latency_yb_ysqlserver_SQLProcessor_UpdateStmt_count{env=~\"$env\",namespace=~\"$namespace\"}[5m]) + rate(handler_latency_yb_ysqlserver_SQLProcessor_DeleteStmt_count{env=~\"$env\",namespace=~\"$namespace\"}[5m]) + rate(handler_latency_yb_ysqlserver_SQLProcessor_OtherStmts_count{env=~\"$env\",namespace=~\"$namespace\"}[5m]))",
-          "legendFormat": "{{env}}",
+          "expr": "sum by (vcluster,env)(rate(handler_latency_yb_ysqlserver_SQLProcessor_SelectStmt_count{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m])+rate(handler_latency_yb_ysqlserver_SQLProcessor_InsertStmt_count{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m])+rate(handler_latency_yb_ysqlserver_SQLProcessor_UpdateStmt_count{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m])+rate(handler_latency_yb_ysqlserver_SQLProcessor_DeleteStmt_count{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m])+rate(handler_latency_yb_ysqlserver_SQLProcessor_OtherStmts_count{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m]))",
+          "legendFormat": "{{vcluster}}/{{env}}",
           "instant": false,
           "range": true,
           "refId": "A"
@@ -634,7 +649,7 @@
     },
     {
       "type": "timeseries",
-      "title": "TServer Read+Write Ops/sec by environment",
+      "title": "TServer Read+Write Ops/sec by env",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -652,8 +667,8 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (env) (rate(handler_latency_yb_tserver_TabletServerService_Read_count{env=~\"$env\",namespace=~\"$namespace\"}[5m]) + rate(handler_latency_yb_tserver_TabletServerService_Write_count{env=~\"$env\",namespace=~\"$namespace\"}[5m]))",
-          "legendFormat": "{{env}}",
+          "expr": "sum by (vcluster,env)(rate(handler_latency_yb_tserver_TabletServerService_Read_count{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m])+rate(handler_latency_yb_tserver_TabletServerService_Write_count{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m]))",
+          "legendFormat": "{{vcluster}}/{{env}}",
           "instant": false,
           "range": true,
           "refId": "A"
@@ -697,7 +712,7 @@
     },
     {
       "type": "timeseries",
-      "title": "Avg YSQL Select latency by environment",
+      "title": "Avg YSQL Select latency by env",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -715,8 +730,8 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (env)(rate(handler_latency_yb_ysqlserver_SQLProcessor_SelectStmt_sum{env=~\"$env\",namespace=~\"$namespace\"}[5m])) / clamp_min(sum by (env)(rate(handler_latency_yb_ysqlserver_SQLProcessor_SelectStmt_count{env=~\"$env\",namespace=~\"$namespace\"}[5m])),1)",
-          "legendFormat": "{{env}}",
+          "expr": "sum by (vcluster,env)(rate(handler_latency_yb_ysqlserver_SQLProcessor_SelectStmt_sum{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m]))/clamp_min(sum by (vcluster,env)(rate(handler_latency_yb_ysqlserver_SQLProcessor_SelectStmt_count{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m])),1)",
+          "legendFormat": "{{vcluster}}/{{env}}",
           "instant": false,
           "range": true,
           "refId": "A"
@@ -760,7 +775,7 @@
     },
     {
       "type": "timeseries",
-      "title": "Log error rate by environment (master+tserver)",
+      "title": "Log error rate by env (master+tserver)",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -778,8 +793,8 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (env)(rate(glog_error_messages{env=~\"$env\",namespace=~\"$namespace\"}[5m]))",
-          "legendFormat": "{{env}}",
+          "expr": "sum by (vcluster,env)(rate(glog_error_messages{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m]))",
+          "legendFormat": "{{vcluster}}/{{env}}",
           "instant": false,
           "range": true,
           "refId": "A"
@@ -823,7 +838,7 @@
     },
     {
       "type": "row",
-      "title": "Per environment / namespace status",
+      "title": "Per vCluster / env / namespace status",
       "collapsed": false,
       "gridPos": {
         "x": 0,
@@ -835,8 +850,8 @@
     },
     {
       "type": "table",
-      "title": "YugabyteDB instances by env / namespace",
-      "description": "One row per environment+namespace running YugabyteDB.",
+      "title": "YugabyteDB instances by vCluster / env / namespace",
+      "description": "One row per vcluster+env+namespace running YugabyteDB.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -845,7 +860,7 @@
         "x": 0,
         "y": 23,
         "w": 24,
-        "h": 9
+        "h": 10
       },
       "targets": [
         {
@@ -853,7 +868,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (env,namespace)(max by (env,namespace,pod)(up{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\"}))",
+          "expr": "sum by (vcluster,env,namespace)(max by (vcluster,env,namespace,pod)(up{job=\"yb-master\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}))",
           "legendFormat": "Masters Up",
           "instant": true,
           "range": false,
@@ -864,7 +879,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (env,namespace)(max by (env,namespace,pod)(up{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\"}))",
+          "expr": "sum by (vcluster,env,namespace)(max by (vcluster,env,namespace,pod)(up{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}))",
           "legendFormat": "TServers Up",
           "instant": true,
           "range": false,
@@ -875,7 +890,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (env,namespace)(num_tablet_servers_live{env=~\"$env\",namespace=~\"$namespace\"})",
+          "expr": "sum by (vcluster,env,namespace)(num_tablet_servers_live{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"})",
           "legendFormat": "Live TServers",
           "instant": true,
           "range": false,
@@ -886,7 +901,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (env,namespace)(num_tablet_servers_dead{env=~\"$env\",namespace=~\"$namespace\"})",
+          "expr": "sum by (vcluster,env,namespace)(num_tablet_servers_dead{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"})",
           "legendFormat": "Dead TServers",
           "instant": true,
           "range": false,

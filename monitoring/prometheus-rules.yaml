@@ -1,0 +1,234 @@
+# ---------------------------------------------------------------------------
+# YugabyteDB PrometheusRule — alerting rules for Prometheus Operator
+# ---------------------------------------------------------------------------
+# Apply to the SAME cluster/namespace as Prometheus:
+#   kubectl apply -f monitoring/prometheus-rules.yaml -n monitoring
+#
+# kube-prometheus-stack picks up PrometheusRules that match the ruleSelector.
+# With the default selector (matchLabels: release: monitoring), add:
+#   labels:
+#     release: monitoring
+# or set ruleSelectorNilUsesHelmValues: false (already done in values-monitoring.yaml).
+#
+# Alternatively, onboard via the grafana-dashboards Helm chart:
+#   See monitoring/charts/grafana-dashboards/values.yaml  prometheusRules section.
+#
+# Labels on all alerts:
+#   vcluster, env, namespace, pod  — from the scraped series labels
+#   severity                        — critical | warning | info
+#
+# Tuning thresholds:
+#   Latency alerts fire at 100 000 µs (100 ms). Adjust to your SLO.
+#   Block-cache alert fires at 80 % hit ratio. Adjust to your workload.
+# ---------------------------------------------------------------------------
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: yugabytedb
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: yugabytedb
+    # Uncomment if kube-prometheus-stack requires release label to pick up rules:
+    # release: monitoring
+spec:
+  groups:
+
+    # ---- availability -------------------------------------------------------
+    - name: yugabytedb.availability
+      interval: 30s
+      rules:
+
+        - alert: YBMasterDown
+          expr: |
+            max by (vcluster, env, namespace, pod) (
+              up{job="yb-master"}
+            ) == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "YB master unreachable: {{ $labels.pod }}"
+            description: >
+              Master {{ $labels.pod }} in namespace {{ $labels.namespace }}
+              (vcluster={{ $labels.vcluster }}, env={{ $labels.env }}) has
+              not been scraped for 2 minutes. Check the pod status and
+              yb-master logs.
+
+        - alert: YBMasterQuorumAtRisk
+          # Fires when fewer than 3 masters are up in a namespace, meaning RF3
+          # quorum (2 of 3) is either at risk or already lost. Does not fire for
+          # single-master (RF1) setups because count would never reach 3.
+          expr: |
+            count by (vcluster, env, namespace) (
+              up{job="yb-master"} == 1
+            ) < 3
+            and
+            count by (vcluster, env, namespace) (
+              up{job="yb-master"}
+            ) >= 2
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "YB master quorum at risk in {{ $labels.namespace }}: only {{ $value }} masters up"
+            description: >
+              Only {{ $value }} masters are reachable in {{ $labels.namespace }}.
+              RF3 quorum requires 2 of 3 masters. If one more master is lost,
+              the universe becomes read-only.
+
+        - alert: YBTServerDown
+          expr: |
+            max by (vcluster, env, namespace, pod) (
+              up{job="yb-tserver"}
+            ) == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "YB tserver unreachable: {{ $labels.pod }}"
+            description: >
+              TServer {{ $labels.pod }} in {{ $labels.namespace }}
+              (vcluster={{ $labels.vcluster }}) has not been scraped for
+              2 minutes.
+
+        - alert: YBTServerReportedDead
+          # num_tablet_servers_dead is reported by the master: a tserver that has
+          # missed heartbeats for --tserver_unresponsive_timeout_ms (default 60s).
+          expr: |
+            sum by (vcluster, env, namespace) (
+              num_tablet_servers_dead
+            ) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "YB dead tservers in {{ $labels.namespace }}: {{ $value }}"
+            description: >
+              {{ $value }} tserver(s) have been reported dead by the master in
+              {{ $labels.namespace }} for 5 minutes. Tablet leader elections will
+              be triggered; client connections to dead tservers will fail.
+
+    # ---- performance --------------------------------------------------------
+    - name: yugabytedb.performance
+      interval: 60s
+      rules:
+
+        - alert: YBWriteBackPressure
+          # majority_sst_files_rejections is a per-tablet counter that increments
+          # when a write is rejected because too many SST files exist in a tablet
+          # (compaction falling behind). Sustained >0 means visible write latency.
+          expr: |
+            sum by (vcluster, env, namespace, pod) (
+              rate(majority_sst_files_rejections{job="yb-tserver"}[5m])
+            ) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "YB write back-pressure on {{ $labels.pod }}"
+            description: >
+              Tablet write throttling detected on {{ $labels.pod }} in
+              {{ $labels.namespace }} for 5 minutes. Compaction is falling
+              behind the write rate. Reduce write throughput or increase
+              block_cache/compaction resources.
+
+        - alert: YBHighYSQLSelectLatency
+          # handler_latency_*_sum is in microseconds. 100 000 µs = 100 ms.
+          expr: |
+            (
+              sum by (vcluster, env, namespace) (
+                rate(handler_latency_yb_ysqlserver_SQLProcessor_SelectStmt_sum[5m])
+              )
+              / clamp_min(
+                sum by (vcluster, env, namespace) (
+                  rate(handler_latency_yb_ysqlserver_SQLProcessor_SelectStmt_count[5m])
+                ), 1)
+            ) > 100000
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High YSQL SELECT latency in {{ $labels.namespace }}"
+            description: >
+              Average YSQL SELECT latency is {{ $value | humanize }}µs (>100ms)
+              in {{ $labels.namespace }}. Check for missing indexes, bloated
+              tables, or resource saturation.
+
+        - alert: YBHighReadLatency
+          # TServer tablet read RPC average > 100 ms
+          expr: |
+            (
+              sum by (vcluster, env, namespace) (
+                rate(handler_latency_yb_tserver_TabletServerService_Read_sum[5m])
+              )
+              / clamp_min(
+                sum by (vcluster, env, namespace) (
+                  rate(handler_latency_yb_tserver_TabletServerService_Read_count[5m])
+                ), 1)
+            ) > 100000
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High tserver read latency in {{ $labels.namespace }}"
+            description: >
+              Average tserver read RPC latency >100ms in {{ $labels.namespace }}.
+
+        - alert: YBHighWriteLatency
+          expr: |
+            (
+              sum by (vcluster, env, namespace) (
+                rate(handler_latency_yb_tserver_TabletServerService_Write_sum[5m])
+              )
+              / clamp_min(
+                sum by (vcluster, env, namespace) (
+                  rate(handler_latency_yb_tserver_TabletServerService_Write_count[5m])
+                ), 1)
+            ) > 100000
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High tserver write latency in {{ $labels.namespace }}"
+            description: >
+              Average tserver write RPC latency >100ms in {{ $labels.namespace }}.
+
+        - alert: YBLowBlockCacheHitRatio
+          # RocksDB block cache hit ratio < 80% for 15 minutes indicates the
+          # working set has grown beyond the configured cache. Increase
+          # tserver --block_cache_capacity_mb.
+          expr: |
+            (
+              sum by (vcluster, env, namespace) (
+                rate(rocksdb_block_cache_hit{job="yb-tserver"}[5m])
+              )
+              / clamp_min(
+                sum by (vcluster, env, namespace) (
+                  rate(rocksdb_block_cache_hit{job="yb-tserver"}[5m])
+                ) + sum by (vcluster, env, namespace) (
+                  rate(rocksdb_block_cache_miss{job="yb-tserver"}[5m])
+                ), 1)
+            ) < 0.80
+          for: 15m
+          labels:
+            severity: info
+          annotations:
+            summary: "Low RocksDB block cache hit ratio in {{ $labels.namespace }}"
+            description: >
+              Block cache hit ratio is {{ $value | humanizePercentage }} (<80%) in
+              {{ $labels.namespace }} for 15 minutes. Consider increasing
+              --block_cache_capacity_mb on tservers.
+
+        - alert: YBHighLogErrorRate
+          expr: |
+            sum by (vcluster, env, namespace) (
+              rate(glog_error_messages[5m])
+            ) > 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Elevated YB error log rate in {{ $labels.namespace }}"
+            description: >
+              More than 1 error-level log message per second in
+              {{ $labels.namespace }} for 5 minutes. Review YB logs.

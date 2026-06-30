@@ -55,3 +55,29 @@ extraDashboards: []
 
 nameOverride: ""
 fullnameOverride: ""
+
+# -- PrometheusRule CRDs deployed alongside the dashboards.
+# Requires prometheus-operator (kube-prometheus-stack or standalone operator).
+# Set enabled: true and populate groups to activate alerting.
+#
+# Example — embed the YugabyteDB rules shipped in monitoring/prometheus-rules.yaml:
+#   prometheusRules:
+#     enabled: true
+#     additionalLabels:
+#       release: monitoring   # required if kube-prometheus-stack uses ruleSelector
+#     groups:
+#       - name: yugabytedb.availability
+#         interval: 30s
+#         rules:
+#           - alert: YBMasterDown
+#             expr: max by (vcluster,env,namespace,pod)(up{job="yb-master"}) == 0
+#             for: 2m
+#             labels: {severity: critical}
+#             annotations:
+#               summary: "YB master down: {{ $labels.pod }}"
+prometheusRules:
+  enabled: false
+  # -- Extra labels on the PrometheusRule object (e.g. release: monitoring).
+  additionalLabels: {}
+  # -- Rule groups. Each entry is a PrometheusRule group object.
+  groups: []

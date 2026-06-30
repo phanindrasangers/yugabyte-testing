@@ -1,0 +1,16 @@
+{{- if and (.Values.prometheusRules | default dict).enabled (.Values.prometheusRules | default dict).groups }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "gdash.fullname" . }}
+  namespace: {{ include "gdash.namespace" . }}
+  labels:
+    {{- include "gdash.labels" . | nindent 4 }}
+    {{- with .Values.prometheusRules.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    {{- toYaml .Values.prometheusRules.groups | nindent 4 }}
+{{- end }}

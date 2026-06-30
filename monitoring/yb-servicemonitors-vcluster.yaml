@@ -1,0 +1,322 @@
+# ---------------------------------------------------------------------------
+# ServiceMonitors: INSIDE-VCLUSTER approach
+# ---------------------------------------------------------------------------
+# Deploy these INSIDE each vCluster alongside the YugabyteDB Helm release.
+# They stamp vcluster + env labels so the Grafana fleet dashboard can
+# segregate by vCluster.
+#
+# Topology assumed:
+#   vCluster cbg-demo  ->  namespaces: cbg-in, cbg-uae, cbg-global
+#   vCluster cbg-test  ->  namespaces: cbg-in, cbg-uae, cbg-global
+#   vCluster cbg-dev   ->  namespaces: cbg-in, cbg-uae, cbg-global
+#
+# How to apply:
+#   # connect into each vCluster, then apply the matching section
+#   vcluster connect cbg-demo -n cbg-demo -- kubectl apply -f yb-servicemonitors-vcluster.yaml
+#   vcluster connect cbg-test -n cbg-test -- kubectl apply -f yb-servicemonitors-vcluster.yaml
+#   vcluster connect cbg-dev  -n cbg-dev  -- kubectl apply -f yb-servicemonitors-vcluster.yaml
+#
+# Or (if you already have a kubeconfig pointing at the vCluster):
+#   kubectl --context vcluster_cbg-demo_cbg-demo_kind-kind apply -f yb-servicemonitors-vcluster.yaml
+#
+# Label model stamped by these monitors:
+#   job       = yb-master | yb-tserver
+#   vcluster  = <vcluster-name>   (e.g. cbg-demo)
+#   env       = <vcluster-name>   (lower envs: env == vcluster name)
+#   namespace = from k8s service discovery (cbg-in, cbg-uae, cbg-global)
+#   pod       = from k8s service discovery
+#
+# Cardinality note: the keep rule retains all server/cluster metrics plus a
+# short allowlist of tablet-scoped storage metrics. Everything else (per-table
+# rollups, per-tablet details) is dropped to keep TSDB cardinality manageable.
+# Add metric names to the allowlist regex if you need additional detail.
+#
+# Scale: RF3 (3 masters) -> set totalMasters:3 in helm values, each master
+#        gets a ServiceMonitor endpoint via namespaceSelector.
+#        Single master + 3 tservers -> same file, master section yields 1 pod.
+# ---------------------------------------------------------------------------
+
+# ==================== vCluster: cbg-demo ====================
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: yb-master-cbg-demo
+  namespace: monitoring       # namespace where your Prometheus Operator runs inside the vCluster
+  labels:
+    app.kubernetes.io/part-of: yugabytedb
+    vcluster: cbg-demo
+spec:
+  namespaceSelector:
+    matchNames:
+      - cbg-in
+      - cbg-uae
+      - cbg-global
+  selector:
+    matchLabels:
+      app: yb-master
+  endpoints:
+    - port: http-ui             # YB master metrics: 7000
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - targetLabel: job
+          replacement: yb-master
+        - targetLabel: vcluster
+          replacement: cbg-demo
+        - targetLabel: env
+          replacement: cbg-demo  # lower env: env == vcluster name
+      metricRelabelings:
+        # Keep server + cluster metrics and a short allowlist of tablet-scoped
+        # storage metrics the dashboards aggregate. Drop per-table/tablet series
+        # that explode on large clusters.
+        - sourceLabels: [metric_type, __name__]
+          separator: ";"
+          regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
+          action: keep
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: yb-tserver-cbg-demo
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: yugabytedb
+    vcluster: cbg-demo
+spec:
+  namespaceSelector:
+    matchNames:
+      - cbg-in
+      - cbg-uae
+      - cbg-global
+  selector:
+    matchLabels:
+      app: yb-tserver
+  endpoints:
+    - port: http-ui             # 9000: server + rocksdb + tserver RPC
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - targetLabel: job
+          replacement: yb-tserver
+        - targetLabel: vcluster
+          replacement: cbg-demo
+        - targetLabel: env
+          replacement: cbg-demo
+      metricRelabelings:
+        - sourceLabels: [metric_type, __name__]
+          separator: ";"
+          regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
+          action: keep
+    - port: http-ysql-met       # 13000: YSQL SQLProcessor metrics
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - targetLabel: job
+          replacement: yb-tserver
+        - targetLabel: vcluster
+          replacement: cbg-demo
+        - targetLabel: env
+          replacement: cbg-demo
+
+# ==================== vCluster: cbg-test ====================
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: yb-master-cbg-test
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: yugabytedb
+    vcluster: cbg-test
+spec:
+  namespaceSelector:
+    matchNames:
+      - cbg-in
+      - cbg-uae
+      - cbg-global
+  selector:
+    matchLabels:
+      app: yb-master
+  endpoints:
+    - port: http-ui
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - targetLabel: job
+          replacement: yb-master
+        - targetLabel: vcluster
+          replacement: cbg-test
+        - targetLabel: env
+          replacement: cbg-test
+      metricRelabelings:
+        - sourceLabels: [metric_type, __name__]
+          separator: ";"
+          regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
+          action: keep
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: yb-tserver-cbg-test
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: yugabytedb
+    vcluster: cbg-test
+spec:
+  namespaceSelector:
+    matchNames:
+      - cbg-in
+      - cbg-uae
+      - cbg-global
+  selector:
+    matchLabels:
+      app: yb-tserver
+  endpoints:
+    - port: http-ui
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - targetLabel: job
+          replacement: yb-tserver
+        - targetLabel: vcluster
+          replacement: cbg-test
+        - targetLabel: env
+          replacement: cbg-test
+      metricRelabelings:
+        - sourceLabels: [metric_type, __name__]
+          separator: ";"
+          regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
+          action: keep
+    - port: http-ysql-met
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - targetLabel: job
+          replacement: yb-tserver
+        - targetLabel: vcluster
+          replacement: cbg-test
+        - targetLabel: env
+          replacement: cbg-test
+
+# ==================== vCluster: cbg-dev ====================
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: yb-master-cbg-dev
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: yugabytedb
+    vcluster: cbg-dev
+spec:
+  namespaceSelector:
+    matchNames:
+      - cbg-in
+      - cbg-uae
+      - cbg-global
+  selector:
+    matchLabels:
+      app: yb-master
+  endpoints:
+    - port: http-ui
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - targetLabel: job
+          replacement: yb-master
+        - targetLabel: vcluster
+          replacement: cbg-dev
+        - targetLabel: env
+          replacement: cbg-dev
+      metricRelabelings:
+        - sourceLabels: [metric_type, __name__]
+          separator: ";"
+          regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
+          action: keep
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: yb-tserver-cbg-dev
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: yugabytedb
+    vcluster: cbg-dev
+spec:
+  namespaceSelector:
+    matchNames:
+      - cbg-in
+      - cbg-uae
+      - cbg-global
+  selector:
+    matchLabels:
+      app: yb-tserver
+  endpoints:
+    - port: http-ui
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - targetLabel: job
+          replacement: yb-tserver
+        - targetLabel: vcluster
+          replacement: cbg-dev
+        - targetLabel: env
+          replacement: cbg-dev
+      metricRelabelings:
+        - sourceLabels: [metric_type, __name__]
+          separator: ";"
+          regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
+          action: keep
+    - port: http-ysql-met
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - targetLabel: job
+          replacement: yb-tserver
+        - targetLabel: vcluster
+          replacement: cbg-dev
+        - targetLabel: env
+          replacement: cbg-dev
+
+# ==================== Higher env (no vCluster) ====================
+# For prod/staging/etc. deployed as plain namespaces (no vcluster layer),
+# use these monitors. They omit the vcluster label; the dashboard vCluster
+# variable's allValue=.* matches empty labels so these series still appear.
+#
+# Uncomment and set env to your environment name.
+#
+# ---
+# apiVersion: monitoring.coreos.com/v1
+# kind: ServiceMonitor
+# metadata:
+#   name: yb-master-prod
+#   namespace: monitoring
+# spec:
+#   namespaceSelector:
+#     matchNames:
+#       - cbg-in-prod
+#       - cbg-uae-prod
+#   selector:
+#     matchLabels:
+#       app: yb-master
+#   endpoints:
+#     - port: http-ui
+#       path: /prometheus-metrics
+#       interval: 30s
+#       relabelings:
+#         - targetLabel: job
+#           replacement: yb-master
+#         - targetLabel: env
+#           replacement: prod        # NO vcluster label for higher env
+#       metricRelabelings:
+#         - sourceLabels: [metric_type, __name__]
+#           separator: ";"
+#           regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
+#           action: keep

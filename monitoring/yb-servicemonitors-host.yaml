@@ -1,0 +1,143 @@
+# ---------------------------------------------------------------------------
+# ServiceMonitors: HOST-CLUSTER approach for vCluster workloads
+# ---------------------------------------------------------------------------
+# Deploy these on the HOST cluster (not inside any vCluster).
+# vCluster syncs pods and services to the host namespace automatically.
+# The Prometheus running on the host can then scrape the synced pods directly
+# without needing a separate Prometheus inside each vCluster.
+#
+# vCluster naming convention for synced objects:
+#   pod     <original-pod>-x-<original-namespace>-x-<vcluster-name>
+#   service <original-service>-x-<original-namespace>-x-<vcluster-name>
+#   Example: yb-master-0-x-cbg-in-x-cbg-demo  (in host ns cbg-demo)
+#            yb-masters-x-cbg-in-x-cbg-demo
+#
+# Labels on synced objects are preserved from the virtual cluster, so
+# matchLabels: app: yb-master works. Port names are also preserved.
+#
+# Relabelings extract vcluster (= host namespace), original namespace, and
+# original pod name via the <name>-x-<ns>-x-<vcluster> pattern.
+# The non-greedy regex (.+?)-x-(.+)-x-(.+) avoids ambiguity when names
+# contain hyphens (e.g. yb-master-0, cbg-in, cbg-demo all use hyphens).
+#
+# How to apply (on host cluster):
+#   kubectl apply -f monitoring/yb-servicemonitors-host.yaml
+#
+# When to use which file:
+#   yb-servicemonitors-vcluster.yaml  ->  you run one Prometheus INSIDE
+#                                         each vCluster (full isolation)
+#   yb-servicemonitors-host.yaml      ->  you run one central Prometheus on
+#                                         the host that scrapes all vClusters
+#   (both produce identical labels; dashboards work unchanged)
+# ---------------------------------------------------------------------------
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: yb-master-vcluster-host
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: yugabytedb
+spec:
+  # Match the HOST namespaces that correspond to vclusters.
+  # vCluster creates one host namespace per vcluster (name = vcluster name).
+  namespaceSelector:
+    matchNames:
+      - cbg-demo
+      - cbg-test
+      - cbg-dev
+  # vCluster preserves original pod/service labels, so app: yb-master still works.
+  selector:
+    matchLabels:
+      app: yb-master
+  endpoints:
+    - port: http-ui             # YB master port 7000 (port name preserved by vCluster)
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - targetLabel: job
+          replacement: yb-master
+        # host namespace = vcluster name
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: vcluster
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: env
+        # Extract original namespace from synced service name:
+        # yb-masters-x-cbg-in-x-cbg-demo  ->  namespace=cbg-in
+        # Non-greedy first capture avoids ambiguity when names contain hyphens.
+        - sourceLabels: [__meta_kubernetes_service_name]
+          regex: '(.+?)-x-(.+)-x-(.+)'
+          targetLabel: namespace
+          replacement: '$2'
+        # Extract original pod name from synced pod name:
+        # yb-master-0-x-cbg-in-x-cbg-demo  ->  pod=yb-master-0
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          regex: '(.+?)-x-(.+)-x-(.+)'
+          targetLabel: pod
+          replacement: '$1'
+      metricRelabelings:
+        - sourceLabels: [metric_type, __name__]
+          separator: ";"
+          regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
+          action: keep
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: yb-tserver-vcluster-host
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: yugabytedb
+spec:
+  namespaceSelector:
+    matchNames:
+      - cbg-demo
+      - cbg-test
+      - cbg-dev
+  selector:
+    matchLabels:
+      app: yb-tserver
+  endpoints:
+    - port: http-ui             # 9000: server + rocksdb + tserver RPC metrics
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - targetLabel: job
+          replacement: yb-tserver
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: vcluster
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: env
+        - sourceLabels: [__meta_kubernetes_service_name]
+          regex: '(.+?)-x-(.+)-x-(.+)'
+          targetLabel: namespace
+          replacement: '$2'
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          regex: '(.+?)-x-(.+)-x-(.+)'
+          targetLabel: pod
+          replacement: '$1'
+      metricRelabelings:
+        - sourceLabels: [metric_type, __name__]
+          separator: ";"
+          regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
+          action: keep
+    - port: http-ysql-met       # 13000: YSQL SQLProcessor metrics
+      path: /prometheus-metrics
+      interval: 30s
+      relabelings:
+        - targetLabel: job
+          replacement: yb-tserver
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: vcluster
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: env
+        - sourceLabels: [__meta_kubernetes_service_name]
+          regex: '(.+?)-x-(.+)-x-(.+)'
+          targetLabel: namespace
+          replacement: '$2'
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          regex: '(.+?)-x-(.+)-x-(.+)'
+          targetLabel: pod
+          replacement: '$1'

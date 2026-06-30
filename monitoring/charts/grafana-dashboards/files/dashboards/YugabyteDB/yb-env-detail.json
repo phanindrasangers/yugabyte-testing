@@ -1,6 +1,6 @@
 {
   "uid": "yb-env-detail",
-  "title": "YugabyteDB \u00b7 Environment Detail",
+  "title": "YugabyteDB \u00b7 vCluster / Environment Detail",
   "tags": [
     "yugabytedb",
     "detail"
@@ -31,14 +31,33 @@
       },
       {
         "type": "query",
+        "name": "vcluster",
+        "label": "vCluster",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": "label_values(up{job=~\"yb.*\"}, vcluster)",
+        "definition": "label_values(up{job=~\"yb.*\"}, vcluster)",
+        "refresh": 2,
+        "sort": 1,
+        "hide": 0,
+        "multi": false,
+        "includeAll": true,
+        "current": {},
+        "regex": "",
+        "allValue": ".*"
+      },
+      {
+        "type": "query",
         "name": "env",
         "label": "Environment",
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "query": "label_values(server_uptime_ms, env)",
-        "definition": "label_values(server_uptime_ms, env)",
+        "query": "label_values(up{job=~\"yb.*\",vcluster=~\"$vcluster\"}, env)",
+        "definition": "label_values(up{job=~\"yb.*\",vcluster=~\"$vcluster\"}, env)",
         "refresh": 2,
         "sort": 1,
         "hide": 0,
@@ -55,8 +74,8 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "query": "label_values(server_uptime_ms{env=~\"$env\"}, namespace)",
-        "definition": "label_values(server_uptime_ms{env=~\"$env\"}, namespace)",
+        "query": "label_values(up{job=~\"yb.*\",vcluster=~\"$vcluster\",env=\"$env\"}, namespace)",
+        "definition": "label_values(up{job=~\"yb.*\",vcluster=~\"$vcluster\",env=\"$env\"}, namespace)",
         "refresh": 2,
         "sort": 1,
         "hide": 0,
@@ -74,8 +93,8 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "query": "label_values(server_uptime_ms{env=~\"$env\",namespace=~\"$namespace\"}, pod)",
-        "definition": "label_values(server_uptime_ms{env=~\"$env\",namespace=~\"$namespace\"}, pod)",
+        "query": "label_values(up{job=~\"yb.*\",vcluster=~\"$vcluster\",env=\"$env\",namespace=~\"$namespace\"}, pod)",
+        "definition": "label_values(up{job=~\"yb.*\",vcluster=~\"$vcluster\",env=\"$env\",namespace=~\"$namespace\"}, pod)",
         "refresh": 2,
         "sort": 1,
         "hide": 0,
@@ -134,7 +153,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(max by (env,namespace,pod)(up{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}))",
+          "expr": "sum(max by (vcluster,env,namespace,pod)(up{job=\"yb-master\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}))",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -190,7 +209,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(max by (env,namespace,pod)(up{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}))",
+          "expr": "sum(max by (vcluster,env,namespace,pod)(up{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}))",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -246,7 +265,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(num_tablet_servers_live{env=~\"$env\",namespace=~\"$namespace\"})",
+          "expr": "sum(num_tablet_servers_live{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"})",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -302,7 +321,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(num_tablet_servers_dead{env=~\"$env\",namespace=~\"$namespace\"})",
+          "expr": "sum(num_tablet_servers_dead{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"})",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -362,7 +381,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "min(server_uptime_ms{env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"})/1000",
+          "expr": "min(server_uptime_ms{job=\"yb-master\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"})/1000",
           "legendFormat": "",
           "instant": true,
           "range": false,
@@ -419,7 +438,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(num_tablet_servers_live{env=~\"$env\",namespace=~\"$namespace\"})",
+          "expr": "sum(num_tablet_servers_live{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"})",
           "legendFormat": "live",
           "instant": false,
           "range": true,
@@ -430,7 +449,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(num_tablet_servers_dead{env=~\"$env\",namespace=~\"$namespace\"})",
+          "expr": "sum(num_tablet_servers_dead{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"})",
           "legendFormat": "dead",
           "instant": false,
           "range": true,
@@ -485,7 +504,7 @@
     {
       "type": "timeseries",
       "title": "Master CPU (cores)",
-      "description": "cpu_utime/stime are milliseconds; /1000 ~ cores",
+      "description": "cpu_utime/stime are cumulative ms; /1000 \u2248 cores",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -502,7 +521,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "(rate(cpu_utime{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m]) + rate(cpu_stime{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))/1000",
+          "expr": "(rate(cpu_utime{job=\"yb-master\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])+rate(cpu_stime{job=\"yb-master\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))/1000",
           "legendFormat": "{{pod}}",
           "instant": false,
           "range": true,
@@ -562,7 +581,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "generic_heap_size{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}",
+          "expr": "generic_heap_size{job=\"yb-master\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}",
           "legendFormat": "{{pod}}",
           "instant": false,
           "range": true,
@@ -622,7 +641,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "rate(rpc_inbound_calls_created{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])",
+          "expr": "rate(rpc_inbound_calls_created{job=\"yb-master\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])",
           "legendFormat": "{{pod}}",
           "instant": false,
           "range": true,
@@ -682,7 +701,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "rate(glog_warning_messages{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])",
+          "expr": "rate(glog_warning_messages{job=\"yb-master\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])",
           "legendFormat": "{{pod}} warn",
           "instant": false,
           "range": true,
@@ -693,7 +712,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "rate(glog_error_messages{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])",
+          "expr": "rate(glog_error_messages{job=\"yb-master\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])",
           "legendFormat": "{{pod}} error",
           "instant": false,
           "range": true,
@@ -753,7 +772,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (pod)(threads_running{job=\"yb-master\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"})",
+          "expr": "sum by (pod)(threads_running{job=\"yb-master\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"})",
           "legendFormat": "{{pod}}",
           "instant": false,
           "range": true,
@@ -825,7 +844,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "(rate(cpu_utime{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m]) + rate(cpu_stime{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))/1000",
+          "expr": "(rate(cpu_utime{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])+rate(cpu_stime{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))/1000",
           "legendFormat": "{{pod}}",
           "instant": false,
           "range": true,
@@ -885,7 +904,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "generic_heap_size{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}",
+          "expr": "generic_heap_size{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}",
           "legendFormat": "{{pod}}",
           "instant": false,
           "range": true,
@@ -945,7 +964,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "rate(rpc_inbound_calls_created{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])",
+          "expr": "rate(rpc_inbound_calls_created{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])",
           "legendFormat": "{{pod}}",
           "instant": false,
           "range": true,
@@ -1017,7 +1036,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (pod)(rate(handler_latency_yb_tserver_TabletServerService_Read_count{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))",
+          "expr": "sum by (pod)(rate(handler_latency_yb_tserver_TabletServerService_Read_count{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))",
           "legendFormat": "{{pod}}",
           "instant": false,
           "range": true,
@@ -1077,7 +1096,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (pod)(rate(handler_latency_yb_tserver_TabletServerService_Write_count{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))",
+          "expr": "sum by (pod)(rate(handler_latency_yb_tserver_TabletServerService_Write_count{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))",
           "legendFormat": "{{pod}}",
           "instant": false,
           "range": true,
@@ -1137,7 +1156,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (pod)(rate(handler_latency_yb_tserver_TabletServerService_Read_sum{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])) / clamp_min(sum by (pod)(rate(handler_latency_yb_tserver_TabletServerService_Read_count{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])),1)",
+          "expr": "sum by (pod)(rate(handler_latency_yb_tserver_TabletServerService_Read_sum{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))/clamp_min(sum by (pod)(rate(handler_latency_yb_tserver_TabletServerService_Read_count{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])),1)",
           "legendFormat": "{{pod}}",
           "instant": false,
           "range": true,
@@ -1197,7 +1216,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (pod)(rate(handler_latency_yb_tserver_TabletServerService_Write_sum{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])) / clamp_min(sum by (pod)(rate(handler_latency_yb_tserver_TabletServerService_Write_count{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])),1)",
+          "expr": "sum by (pod)(rate(handler_latency_yb_tserver_TabletServerService_Write_sum{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))/clamp_min(sum by (pod)(rate(handler_latency_yb_tserver_TabletServerService_Write_count{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])),1)",
           "legendFormat": "{{pod}}",
           "instant": false,
           "range": true,
@@ -1269,7 +1288,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_SelectStmt_count{env=~\"$env\",namespace=~\"$namespace\"}[5m]))",
+          "expr": "sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_SelectStmt_count{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m]))",
           "legendFormat": "select",
           "instant": false,
           "range": true,
@@ -1280,7 +1299,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_InsertStmt_count{env=~\"$env\",namespace=~\"$namespace\"}[5m]))",
+          "expr": "sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_InsertStmt_count{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m]))",
           "legendFormat": "insert",
           "instant": false,
           "range": true,
@@ -1291,7 +1310,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_UpdateStmt_count{env=~\"$env\",namespace=~\"$namespace\"}[5m]))",
+          "expr": "sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_UpdateStmt_count{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m]))",
           "legendFormat": "update",
           "instant": false,
           "range": true,
@@ -1302,7 +1321,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_DeleteStmt_count{env=~\"$env\",namespace=~\"$namespace\"}[5m]))",
+          "expr": "sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_DeleteStmt_count{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m]))",
           "legendFormat": "delete",
           "instant": false,
           "range": true,
@@ -1313,7 +1332,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_OtherStmts_count{env=~\"$env\",namespace=~\"$namespace\"}[5m]))",
+          "expr": "sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_OtherStmts_count{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m]))",
           "legendFormat": "other",
           "instant": false,
           "range": true,
@@ -1373,7 +1392,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_SelectStmt_sum{env=~\"$env\",namespace=~\"$namespace\"}[5m]))/clamp_min(sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_SelectStmt_count{env=~\"$env\",namespace=~\"$namespace\"}[5m])),1)",
+          "expr": "sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_SelectStmt_sum{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m]))/clamp_min(sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_SelectStmt_count{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m])),1)",
           "legendFormat": "select",
           "instant": false,
           "range": true,
@@ -1384,7 +1403,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_InsertStmt_sum{env=~\"$env\",namespace=~\"$namespace\"}[5m]))/clamp_min(sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_InsertStmt_count{env=~\"$env\",namespace=~\"$namespace\"}[5m])),1)",
+          "expr": "sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_InsertStmt_sum{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m]))/clamp_min(sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_InsertStmt_count{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m])),1)",
           "legendFormat": "insert",
           "instant": false,
           "range": true,
@@ -1395,7 +1414,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_UpdateStmt_sum{env=~\"$env\",namespace=~\"$namespace\"}[5m]))/clamp_min(sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_UpdateStmt_count{env=~\"$env\",namespace=~\"$namespace\"}[5m])),1)",
+          "expr": "sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_UpdateStmt_sum{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m]))/clamp_min(sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_UpdateStmt_count{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m])),1)",
           "legendFormat": "update",
           "instant": false,
           "range": true,
@@ -1406,7 +1425,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_DeleteStmt_sum{env=~\"$env\",namespace=~\"$namespace\"}[5m]))/clamp_min(sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_DeleteStmt_count{env=~\"$env\",namespace=~\"$namespace\"}[5m])),1)",
+          "expr": "sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_DeleteStmt_sum{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m]))/clamp_min(sum(rate(handler_latency_yb_ysqlserver_SQLProcessor_DeleteStmt_count{vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}[5m])),1)",
           "legendFormat": "delete",
           "instant": false,
           "range": true,
@@ -1466,7 +1485,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (pod)(yb_ysqlserver_active_connection_total{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"})",
+          "expr": "sum by (pod)(yb_ysqlserver_active_connection_total{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"})",
           "legendFormat": "{{pod}}",
           "instant": false,
           "range": true,
@@ -1538,7 +1557,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (pod)(rocksdb_current_version_sst_files_size{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"})",
+          "expr": "sum by (pod)(rocksdb_current_version_sst_files_size{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"})",
           "legendFormat": "{{pod}}",
           "instant": false,
           "range": true,
@@ -1598,7 +1617,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum(rate(rocksdb_block_cache_hit{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])) / clamp_min(sum(rate(rocksdb_block_cache_hit{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])) + sum(rate(rocksdb_block_cache_miss{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])),1)",
+          "expr": "sum(rate(rocksdb_block_cache_hit{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))/clamp_min(sum(rate(rocksdb_block_cache_hit{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))+sum(rate(rocksdb_block_cache_miss{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m])),1)",
           "legendFormat": "hit ratio",
           "instant": false,
           "range": true,
@@ -1658,7 +1677,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (pod)(rate(log_bytes_logged{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))",
+          "expr": "sum by (pod)(rate(log_bytes_logged{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))",
           "legendFormat": "{{pod}}",
           "instant": false,
           "range": true,
@@ -1718,7 +1737,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "sum by (pod)(rate(majority_sst_files_rejections{job=\"yb-tserver\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))",
+          "expr": "sum by (pod)(rate(majority_sst_files_rejections{job=\"yb-tserver\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))",
           "legendFormat": "{{pod}}",
           "instant": false,
           "range": true,
