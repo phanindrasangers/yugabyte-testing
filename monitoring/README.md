@@ -619,24 +619,126 @@ To add a metric: extend the `|tablet;(...)` alternation group.
 
 ## Higher Env (No vCluster)
 
-For production/staging where YugabyteDB runs in a plain namespace without vCluster:
+In production or staging, YugabyteDB typically runs directly in a Kubernetes namespace with no vCluster layer. There is no `-x-` service renaming, no vCluster control-plane, and no `vcluster` label on scraped metrics. Two separate Grafana dashboards are provided for this topology.
+
+### Label model (higher env)
+
+| Label       | Value                                  |
+|-------------|----------------------------------------|
+| `job`       | `yb-master` / `yb-tserver`             |
+| `vcluster`  | *(absent — no label)*                  |
+| `env`       | `prod` / `staging` (constant, set in relabeling) |
+| `namespace` | `cbg-in-prod` / `cbg-uae-prod` / etc. |
+| `pod`       | `yb-master-0`                          |
+
+### ServiceMonitor (higher env)
+
+No vCluster selector is needed. The ServiceMonitor looks exactly like a standard Kubernetes ServiceMonitor — the only difference is that the relabeling stamps `env` but omits `vcluster`:
 
 ```yaml
-# Uncomment the higher-env section at the bottom of yb-servicemonitors-vcluster.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: yb-master-prod
+  namespace: monitoring
 spec:
   namespaceSelector:
-    matchNames: [cbg-in-prod, cbg-uae-prod]
+    matchNames: [cbg-in-prod, cbg-uae-prod, cbg-global-prod]
   selector:
     matchLabels:
       app: yb-master
   endpoints:
     - port: http-ui
+      path: /prometheus-metrics
       relabelings:
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
         - targetLabel: env
-          replacement: prod    # NO vcluster label — intentionally omitted
+          replacement: prod          # stamp env; do NOT add vcluster
+      metricRelabelings:
+        - sourceLabels: [metric_type, __name__]
+          separator: ";"
+          regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
+          action: keep
 ```
 
-The dashboard `vcluster` variable uses `allValue=.*`. The regex `.*` matches the empty string, so series with no `vcluster` label appear in fleet view when "All" is selected. Filtering by `cbg-demo` hides higher-env series; "All" shows everything from both topologies.
+Apply it:
+
+```bash
+kubectl apply -f monitoring/yb-servicemonitors.yaml -n monitoring
+```
+
+### Raw scrape_config (higher env)
+
+See **Section C** in `monitoring/prometheus-scrape-config.yaml`. Uncomment and replace the namespace list and `env` constant with your values.
+
+### Why `vcluster` is omitted — and why that's correct
+
+The fleet dashboards (`yb-fleet-overview`, `yb-env-detail`) have a `vcluster` template variable with `allValue=.*`. The regex `.*` matches the empty string, so series that carry no `vcluster` label also appear when "All" is selected. Higher-env namespaces show up in the fleet table alongside vCluster-based ones.
+
+However, using the fleet dashboards for production is awkward: the `vcluster` dropdown is irrelevant, and panel titles mention "vCluster / Environment" rather than just namespaces. The dedicated namespace dashboards below give a cleaner view.
+
+### Dedicated dashboards for direct-namespace environments
+
+Two dashboards are provided under **YugabyteDB/** that have no `vcluster` variable at all:
+
+#### `yb-ns-overview` — Namespace Overview (Direct / Higher Env)
+
+Variables: `Environment` (multi-select) → `Namespace` (multi-select, cascades from env).
+
+Panels:
+- Stats row: Environments, Namespaces, Masters Up, Masters Down, TServers Up, TServers Down
+- YSQL Ops/sec grouped by `env/namespace`
+- TServer Read+Write Ops/sec grouped by `env/namespace`
+- Avg YSQL Select latency by `env/namespace`
+- Log error rate by `env/namespace`
+- Table: one row per `env+namespace` with Masters Up, TServers Up, Live TServers, Dead TServers (dead column turns red)
+
+#### `yb-ns-detail` — Namespace Detail (Direct / Higher Env)
+
+Variables: `Environment` (single-select) → `Namespace` (multi) → `Pod` (multi).
+
+Panels: identical to `yb-env-detail` (Masters section, TServers resources, TServers read/write, YSQL, Storage/RocksDB) but all PromQL uses `env="$env",namespace=~"$namespace"` with no `vcluster` selector.
+
+#### Deploy / reload
+
+The dashboards are shipped as ConfigMaps via the `grafana-dashboards` Helm chart. After any JSON change:
+
+```bash
+helm upgrade --install grafana-dashboards \
+  monitoring/charts/grafana-dashboards \
+  -n monitoring \
+  -f monitoring/charts/grafana-dashboards/values.yaml
+```
+
+Grafana's sidecar detects the ConfigMap labels and loads the dashboards automatically — no restart needed.
+
+#### Verify in Grafana
+
+```bash
+kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80
+```
+
+Open `http://localhost:3000`, navigate to **YugabyteDB/** folder. You should see four dashboards:
+
+| Dashboard | UID | Use for |
+|-----------|-----|---------|
+| Fleet Overview (All vClusters / Environments) | `yb-fleet-overview` | Cross-vCluster fleet view |
+| vCluster / Environment Detail | `yb-env-detail` | Drill-down into one vCluster+env |
+| Namespace Overview (Direct / Higher Env) | `yb-ns-overview` | Multi-env direct-namespace overview |
+| Namespace Detail (Direct / Higher Env) | `yb-ns-detail` | Pod-level detail for direct namespaces |
+
+### Topology comparison
+
+| Characteristic | Lower env (vCluster) | Higher env (direct namespace) |
+|----------------|----------------------|-------------------------------|
+| YB service names | `yb-masters-x-cbg-in-x-cbg-demo` | `yb-masters` |
+| `vcluster` label | `cbg-demo` / `cbg-test` / `cbg-dev` | *(absent)* |
+| ServiceMonitor type | Host-level (Approach A) | Standard Kubernetes |
+| `-x-` relabeling needed | Yes — to extract original namespace/pod | No |
+| Dashboard to use | `yb-fleet-overview` + `yb-env-detail` | `yb-ns-overview` + `yb-ns-detail` |
 
 ---
 
@@ -648,8 +750,9 @@ monitoring/
 ├── generate_dashboards.py               builds fleet + detail + platform JSON
 ├── prometheus-rules.yaml                PrometheusRule CRD (10 alerts, 2 groups)
 ├── prometheus-scrape-config.yaml        raw scrape_configs (4 sections A-D)
-├── yb-servicemonitors-host.yaml         host-level ServiceMonitors (Approach A)
+├── yb-servicemonitors-host.yaml         host-level ServiceMonitors (Approach A, all vClusters)
 ├── yb-servicemonitors-vcluster.yaml     inside-vCluster ServiceMonitors (Approach B)
+├── yb-servicemonitors.yaml              standard ServiceMonitors for direct-namespace envs
 ├── values-monitoring.yaml               kube-prometheus-stack Helm values
 └── charts/
     └── grafana-dashboards/
@@ -661,8 +764,10 @@ monitoring/
         └── files/
             └── dashboards/
                 ├── YugabyteDB/
-                │   ├── yb-fleet-overview.json
-                │   └── yb-env-detail.json
+                │   ├── yb-fleet-overview.json   vCluster fleet view (all envs)
+                │   ├── yb-env-detail.json        vCluster per-env drill-down
+                │   ├── yb-ns-overview.json       direct namespace overview (higher env)
+                │   └── yb-ns-detail.json         direct namespace drill-down (higher env)
                 └── Platform/
                     └── prometheus-targets.json
 ```
