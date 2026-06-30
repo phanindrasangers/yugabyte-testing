@@ -9,10 +9,9 @@
 # labels are only appended on remote_write/federation, never stored locally,
 # so the Grafana dropdowns would be empty. Stamp them as target_labels here.
 #
-# SECTION A  Inside-vcluster Prometheus (scrapes YB within the same vCluster)
-# SECTION B  Host-cluster Prometheus (scrapes vCluster synced pods on host)
-# SECTION C  Direct namespace / higher env (no vCluster layer)
-# SECTION D  Non-Kubernetes / static targets (VMs, bare metal)
+# SECTION A  Host-cluster Prometheus (scrapes vCluster synced pods on host)
+# SECTION B  Direct namespace / higher env (no vCluster layer)
+# SECTION C  Non-Kubernetes / static targets (VMs, bare metal)
 #
 # To load in kube-prometheus-stack (additionalScrapeConfigs):
 #   kubectl -n monitoring create secret generic yb-scrape-configs \
@@ -30,7 +29,7 @@
 # | Label     | Source                                               |
 # +-----------+------------------------------------------------------+
 # | job       | job_name                                             |
-# | vcluster  | constant relabel or extracted from pod/ns name       |
+# | vcluster  | from host namespace name (Section A) or absent (B/C) |
 # | env       | constant relabel (= vcluster name in lower envs)     |
 # | namespace | __meta_kubernetes_namespace (or constant for static) |
 # | pod       | __meta_kubernetes_pod_name (or from address)         |
@@ -40,66 +39,11 @@
 scrape_configs:
 
 # ===========================================================================
-# SECTION A: Inside-vCluster Prometheus
-# Deploy this Prometheus INSIDE cbg-demo (cbg-test, cbg-dev). It can reach
-# YB pods directly by in-cluster DNS. This config stamps vcluster + env.
-# Repeat this section in each vCluster, changing the vcluster/env values.
-# ===========================================================================
-
-  # ----- masters: port 7000 -----
-  - job_name: yb-master
-    metrics_path: /prometheus-metrics
-    kubernetes_sd_configs:
-      - role: endpoints
-    relabel_configs:
-      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
-        separator: ";"
-        regex: (cbg-in|cbg-uae|cbg-global);yb-masters;http-ui
-        action: keep
-      - source_labels: [__meta_kubernetes_namespace]
-        target_label: namespace
-      - source_labels: [__meta_kubernetes_pod_name]
-        target_label: pod
-      - target_label: vcluster
-        replacement: cbg-demo          # CHANGE per vCluster
-      - target_label: env
-        replacement: cbg-demo          # lower env: env == vcluster name
-    metric_relabel_configs:
-      - source_labels: [metric_type, __name__]
-        separator: ";"
-        regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
-        action: keep
-
-  # ----- tservers: ports 9000 (server/rocksdb) + 13000 (YSQL) -----
-  - job_name: yb-tserver
-    metrics_path: /prometheus-metrics
-    kubernetes_sd_configs:
-      - role: endpoints
-    relabel_configs:
-      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
-        separator: ";"
-        regex: (cbg-in|cbg-uae|cbg-global);yb-tservers;(http-ui|http-ysql-met)
-        action: keep
-      - source_labels: [__meta_kubernetes_namespace]
-        target_label: namespace
-      - source_labels: [__meta_kubernetes_pod_name]
-        target_label: pod
-      - target_label: vcluster
-        replacement: cbg-demo          # CHANGE per vCluster
-      - target_label: env
-        replacement: cbg-demo
-    metric_relabel_configs:
-      - source_labels: [metric_type, __name__]
-        separator: ";"
-        regex: "(server|cluster|);.*|tablet;(rocksdb_current_version_sst_files_size|rocksdb_block_cache_hit|rocksdb_block_cache_miss|log_bytes_logged|majority_sst_files_rejections)"
-        action: keep
-
-
-# ===========================================================================
-# SECTION B: Host-cluster Prometheus scraping vCluster synced pods
+# SECTION A: Host-cluster Prometheus scraping vCluster synced pods
 # vCluster syncs pods to the host namespace (one host ns per vCluster).
-# Pod names: <pod>-x-<original-ns>-x-<vcluster>   e.g. yb-master-0-x-cbg-in-x-cbg-demo
-# This lets a single host Prometheus scrape all vclusters.
+# Pod names follow: <original-pod>-x-<original-ns>-x-<vcluster>
+# e.g. yb-master-0-x-cbg-in-x-cbg-demo
+# A single host Prometheus scrapes all vClusters from here.
 # ===========================================================================
 
 # Uncomment to activate. The host Prometheus must have RBAC to read pods
@@ -177,7 +121,7 @@ scrape_configs:
 
 
 # ===========================================================================
-# SECTION C: Direct namespace / higher env (no vCluster)
+# SECTION B: Direct namespace / higher env (no vCluster)
 # Standard k8s. No vcluster label. The dashboard vcluster variable's
 # allValue=.* matches series with empty vcluster label, so these still appear.
 # ===========================================================================
@@ -205,7 +149,7 @@ scrape_configs:
 
 
 # ===========================================================================
-# SECTION D: Non-Kubernetes / static targets (VMs, bare metal)
+# SECTION C: Non-Kubernetes / static targets (VMs, bare metal)
 # No namespace/pod metadata. Attach them as constant labels per target group.
 # ===========================================================================
 

@@ -1,6 +1,6 @@
 # YugabyteDB Monitoring — vCluster-Aware Setup
 
-This directory contains everything needed to monitor YugabyteDB across multiple vClusters and namespaces with a single central Prometheus and two Grafana dashboards that segregate metrics by vCluster, environment, and namespace.
+This directory contains everything needed to monitor YugabyteDB across multiple vClusters and namespaces with a single central host Prometheus and Grafana dashboards that segregate metrics by vCluster, environment, and namespace.
 
 ---
 
@@ -10,21 +10,19 @@ This directory contains everything needed to monitor YugabyteDB across multiple 
 2. [vCluster Service Naming — The `-x-` Convention](#vcluster-service-naming)
 3. [How Prometheus Discovers Services in a vCluster](#how-prometheus-discovers-services)
    - [Approach A: ServiceMonitor (Host-Level)](#approach-a-servicemonitor-host-level)
-   - [Approach B: ServiceMonitor (Inside vCluster)](#approach-b-servicemonitor-inside-vcluster)
-   - [Approach C: Raw scrape_config](#approach-c-raw-scrape_config)
+   - [Approach B: Raw scrape_config](#approach-b-raw-scrape_config)
 4. [Label Model](#label-model)
 5. [Deploy: Install vClusters](#deploy-install-vclusters)
 6. [Deploy: YugabyteDB Helm](#deploy-yugabytedb-helm)
    - [RF3 (3 masters, 3 tservers)](#rf3-3-masters-3-tservers)
    - [Single master + 3 tservers](#single-master--3-tservers)
 7. [Deploy: ServiceMonitors (Host)](#deploy-servicemonitors-host)
-8. [Deploy: ServiceMonitors (Inside vCluster)](#deploy-servicemonitors-inside-vcluster)
-9. [Scaling Masters (RF3 Operations)](#scaling-masters-rf3-operations)
-10. [Dashboards](#dashboards)
-11. [PrometheusRule Alerts](#prometheusrule-alerts)
-12. [Cardinality Control](#cardinality-control)
-13. [Higher Env (No vCluster)](#higher-env-no-vcluster)
-14. [File Reference](#file-reference)
+8. [Scaling Masters (RF3 Operations)](#scaling-masters-rf3-operations)
+9. [Dashboards](#dashboards)
+10. [PrometheusRule Alerts](#prometheusrule-alerts)
+11. [Cardinality Control](#cardinality-control)
+12. [Higher Env (No vCluster)](#higher-env-no-vcluster)
+13. [File Reference](#file-reference)
 
 ---
 
@@ -118,7 +116,7 @@ These are an alternative way to read the original namespace without regex.
 
 ## How Prometheus Discovers Services in a vCluster
 
-There are three approaches. They all produce identical labels so the same dashboards work for all of them.
+There are two approaches. Both produce identical labels so the same dashboards work for either.
 
 ### Approach A: ServiceMonitor (Host-Level)
 
@@ -210,57 +208,19 @@ spec:
           replacement: '$1'
 ```
 
-### Approach B: ServiceMonitor (Inside vCluster)
-
-**File:** `monitoring/yb-servicemonitors-vcluster.yaml`
-
-Deploy a Prometheus Operator **inside** each vCluster. The ServiceMonitor uses standard in-cluster service discovery — no `-x-` names at all, because inside the vCluster everything looks normal.
-
-```
-PROMETHEUS inside cbg-demo vCluster
-    |
-    | ServiceMonitor: namespaceSelector = [cbg-in, cbg-uae, cbg-global]
-    |                 selector = {app: yb-master}
-    |
-    ▼
-yb-masters   (in ns cbg-in)     ← plain name, no -x- suffix
-yb-masters   (in ns cbg-uae)
-yb-masters   (in ns cbg-global)
-```
-
-The vcluster and env labels are **stamped as constants** because the ServiceMonitor knows which vCluster it lives in:
-
-```yaml
-relabelings:
-  - targetLabel: vcluster
-    replacement: cbg-demo    # hardcoded — this monitor runs inside cbg-demo
-  - targetLabel: env
-    replacement: cbg-demo
-```
-
-**When to use Approach B:** When each vCluster team owns its own observability stack, or when vCluster network isolation prevents the host Prometheus from reaching pods.
-
-**Apply:**
-```bash
-vcluster connect cbg-demo -n cbg-demo -- kubectl apply -f monitoring/yb-servicemonitors-vcluster.yaml
-vcluster connect cbg-test -n cbg-test -- kubectl apply -f monitoring/yb-servicemonitors-vcluster.yaml
-vcluster connect cbg-dev  -n cbg-dev  -- kubectl apply -f monitoring/yb-servicemonitors-vcluster.yaml
-```
-
-### Approach C: Raw scrape_config
+### Approach B: Raw scrape_config
 
 **File:** `monitoring/prometheus-scrape-config.yaml`
 
-For clusters not using Prometheus Operator (plain `prometheus.yml`). Four sections:
+For clusters not using Prometheus Operator (plain `prometheus.yml`). Three sections:
 
 | Section | Topology | vcluster label source |
 |---------|----------|----------------------|
-| A | Inside-vCluster Prometheus | constant `replacement: cbg-demo` |
-| B | Host Prometheus, pod SD | from `__meta_kubernetes_namespace` |
-| C | Direct namespace (no vCluster) | omitted (empty label) |
-| D | Static targets (VMs, bare metal) | constant or empty string |
+| A | Host Prometheus, pod SD | from `__meta_kubernetes_namespace` |
+| B | Direct namespace / higher env (no vCluster) | omitted (empty label) |
+| C | Static targets (VMs, bare metal) | constant or empty string |
 
-**Section B (host-level) — how it identifies services:**
+**Section A (host-level) — how it identifies services:**
 
 ```yaml
 - job_name: yb-master-vcluster-host
@@ -454,17 +414,6 @@ kubectl apply -f monitoring/yb-servicemonitors-host.yaml
 ```bash
 kubectl -n monitoring port-forward svc/monitoring-kube-prometheus-prometheus 9090:9090 &
 # Open http://localhost:9090/targets  filter: "yb"
-```
-
----
-
-## Deploy: ServiceMonitors (Inside vCluster)
-
-```bash
-for vc in cbg-demo cbg-test cbg-dev; do
-  vcluster connect $vc --namespace $vc -- \
-    kubectl apply -f monitoring/yb-servicemonitors-vcluster.yaml
-done
 ```
 
 ---
@@ -672,7 +621,7 @@ kubectl apply -f monitoring/yb-servicemonitors.yaml -n monitoring
 
 ### Raw scrape_config (higher env)
 
-See **Section C** in `monitoring/prometheus-scrape-config.yaml`. Uncomment and replace the namespace list and `env` constant with your values.
+See **Section B** in `monitoring/prometheus-scrape-config.yaml`. Uncomment and replace the namespace list and `env` constant with your values.
 
 ### Why `vcluster` is omitted — and why that's correct
 
@@ -750,8 +699,7 @@ monitoring/
 ├── generate_dashboards.py               builds fleet + detail + platform JSON
 ├── prometheus-rules.yaml                PrometheusRule CRD (10 alerts, 2 groups)
 ├── prometheus-scrape-config.yaml        raw scrape_configs (4 sections A-D)
-├── yb-servicemonitors-host.yaml         host-level ServiceMonitors (Approach A, all vClusters)
-├── yb-servicemonitors-vcluster.yaml     inside-vCluster ServiceMonitors (Approach B)
+├── yb-servicemonitors-host.yaml         host-level ServiceMonitors (all vClusters)
 ├── yb-servicemonitors.yaml              standard ServiceMonitors for direct-namespace envs
 ├── values-monitoring.yaml               kube-prometheus-stack Helm values
 └── charts/
