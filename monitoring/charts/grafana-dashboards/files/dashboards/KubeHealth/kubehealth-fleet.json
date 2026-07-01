@@ -3,7 +3,7 @@
   "title": "KubeHealth · Gateway Check Fleet",
   "tags": ["kubehealth", "health", "gateway"],
   "schemaVersion": 39,
-  "version": 3,
+  "version": 5,
   "editable": true,
   "graphTooltip": 1,
   "refresh": "30s",
@@ -24,11 +24,11 @@
       },
       {
         "type": "query",
-        "name": "vcluster",
-        "label": "vCluster",
+        "name": "env",
+        "label": "Environment",
         "datasource": {"type": "prometheus", "uid": "${datasource}"},
-        "query": "label_values(kuberhealthy_check{job=~\"kuberhealthy.*\"}, vcluster)",
-        "definition": "label_values(kuberhealthy_check{job=~\"kuberhealthy.*\"}, vcluster)",
+        "query": "label_values(kuberhealthy_check{job=~\"kuberhealthy.*\"}, env)",
+        "definition": "label_values(kuberhealthy_check{job=~\"kuberhealthy.*\"}, env)",
         "refresh": 2,
         "sort": 1,
         "hide": 0,
@@ -41,6 +41,7 @@
   },
   "annotations": {"list": [{"builtIn": 1, "type": "dashboard", "hide": true, "datasource": {"type": "grafana", "uid": "-- Grafana --"}, "name": "Annotations & Alerts", "iconColor": "rgba(0,211,255,1)"}]},
   "panels": [
+
     {
       "type": "row",
       "id": 1,
@@ -57,7 +58,7 @@
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "none", "graphMode": "none"},
       "fieldConfig": {"defaults": {"unit": "short", "color": {"mode": "fixed", "fixedColor": "text"}}},
-      "targets": [{"expr": "count(kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\"})", "instant": true, "legendFormat": ""}]
+      "targets": [{"expr": "count(kuberhealthy_check{job=~\"kuberhealthy.*\",env=~\"$env\"})", "instant": true, "legendFormat": ""}]
     },
     {
       "type": "stat",
@@ -73,7 +74,7 @@
           "color": {"mode": "thresholds"}
         }
       },
-      "targets": [{"expr": "count(kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\",status=\"1\"}) or vector(0)", "instant": true, "legendFormat": ""}]
+      "targets": [{"expr": "count(kuberhealthy_check{job=~\"kuberhealthy.*\",env=~\"$env\",status=\"1\"}) or vector(0)", "instant": true, "legendFormat": ""}]
     },
     {
       "type": "stat",
@@ -89,7 +90,7 @@
           "color": {"mode": "thresholds"}
         }
       },
-      "targets": [{"expr": "count(kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\",status=\"0\"}) or vector(0)", "instant": true, "legendFormat": ""}]
+      "targets": [{"expr": "count(kuberhealthy_check{job=~\"kuberhealthy.*\",env=~\"$env\",status=\"0\"}) or vector(0)", "instant": true, "legendFormat": ""}]
     },
     {
       "type": "stat",
@@ -106,30 +107,100 @@
           "color": {"mode": "thresholds"}
         }
       },
-      "targets": [{"expr": "100 * count(kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\",status=\"1\"}) / count(kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\"})", "instant": true, "legendFormat": ""}]
+      "targets": [{"expr": "100 * count(kuberhealthy_check{job=~\"kuberhealthy.*\",env=~\"$env\",status=\"1\"}) / count(kuberhealthy_check{job=~\"kuberhealthy.*\",env=~\"$env\"})", "instant": true, "legendFormat": ""}]
     },
+
+    {
+      "type": "row",
+      "id": 12,
+      "title": "Health Breakdown",
+      "collapsed": false,
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "panels": []
+    },
+    {
+      "type": "piechart",
+      "id": 13,
+      "title": "Healthy vs Unhealthy",
+      "gridPos": {"x": 0, "y": 6, "w": 8, "h": 9},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "options": {
+        "pieType": "donut",
+        "displayLabels": ["name", "value"],
+        "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]}
+      },
+      "fieldConfig": {
+        "defaults": {"unit": "short"},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "Healthy"},   "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byName", "options": "Unhealthy"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+        ]
+      },
+      "targets": [
+        {"expr": "count(kuberhealthy_check{job=~\"kuberhealthy.*\",env=~\"$env\",status=\"1\"}) or vector(0)", "instant": true, "legendFormat": "Healthy"},
+        {"expr": "count(kuberhealthy_check{job=~\"kuberhealthy.*\",env=~\"$env\",status=\"0\"}) or vector(0)", "instant": true, "legendFormat": "Unhealthy"}
+      ]
+    },
+    {
+      "type": "table",
+      "id": 14,
+      "title": "Failing Gateways — Error Reasons",
+      "gridPos": {"x": 8, "y": 6, "w": 16, "h": 9},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "options": {"footer": {"show": false}},
+      "fieldConfig": {
+        "defaults": {"custom": {"align": "left"}},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "Environment"}, "properties": [{"id": "custom.width", "value": 180}]},
+          {"matcher": {"id": "byName", "options": "Check"},       "properties": [{"id": "custom.width", "value": 200}]},
+          {"matcher": {"id": "byName", "options": "Reason"},      "properties": [{"id": "custom.displayMode", "value": "auto"}, {"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]}
+        ]
+      },
+      "transformations": [
+        {"id": "merge", "options": {}},
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {"env": "Environment", "check": "Check", "error": "Reason"},
+            "excludeByName": {
+              "Time": true, "__name__": true, "Value": true,
+              "container": true, "endpoint": true, "exported_namespace": true,
+              "instance": true, "job": true, "namespace": true,
+              "pod": true, "service": true, "status": true
+            },
+            "indexByName": {"env": 0, "check": 1, "error": 2}
+          }
+        }
+      ],
+      "targets": [
+        {
+          "expr": "kuberhealthy_check{job=~\"kuberhealthy.*\",env=~\"$env\",status=\"0\"}",
+          "instant": true,
+          "legendFormat": "{{env}} / {{check}}"
+        }
+      ]
+    },
+
     {
       "type": "row",
       "id": 6,
-      "title": "Check Status",
+      "title": "All Checks",
       "collapsed": false,
-      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "gridPos": {"x": 0, "y": 15, "w": 24, "h": 1},
       "panels": []
     },
     {
       "type": "table",
       "id": 7,
       "title": "Gateway Health — All Checks",
-      "gridPos": {"x": 0, "y": 6, "w": 24, "h": 10},
+      "gridPos": {"x": 0, "y": 16, "w": 24, "h": 9},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "options": {
         "sortBy": [{"displayName": "Status", "desc": false}],
         "footer": {"show": false}
       },
       "fieldConfig": {
-        "defaults": {
-          "custom": {"align": "left", "displayMode": "auto", "inspect": false}
-        },
+        "defaults": {"custom": {"align": "left", "displayMode": "auto"}},
         "overrides": [
           {
             "matcher": {"id": "byName", "options": "Status"},
@@ -141,72 +212,55 @@
               {"id": "mappings", "value": [{"type": "value", "options": {"0": {"text": "FAIL", "color": "red", "index": 0}, "1": {"text": "PASS", "color": "green", "index": 1}}}]}
             ]
           },
-          {
-            "matcher": {"id": "byName", "options": "vCluster"},
-            "properties": [{"id": "custom.width", "value": 200}]
-          },
-          {
-            "matcher": {"id": "byName", "options": "Check"},
-            "properties": [{"id": "custom.width", "value": 220}]
-          },
-          {
-            "matcher": {"id": "byName", "options": "Error"},
-            "properties": [{"id": "custom.displayMode", "value": "auto"}]
-          }
+          {"matcher": {"id": "byName", "options": "Environment"}, "properties": [{"id": "custom.width", "value": 200}]},
+          {"matcher": {"id": "byName", "options": "Check"},       "properties": [{"id": "custom.width", "value": 220}]},
+          {"matcher": {"id": "byName", "options": "Error"},       "properties": [{"id": "custom.displayMode", "value": "auto"}]}
         ]
       },
       "transformations": [
+        {"id": "merge", "options": {}},
         {
           "id": "organize",
           "options": {
-            "renameByName": {
-              "vcluster": "vCluster",
-              "check": "Check",
-              "Value": "Status",
-              "error": "Error"
-            },
+            "renameByName": {"env": "Environment", "check": "Check", "Value": "Status", "error": "Error"},
             "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "container": true,
-              "endpoint": true,
-              "env": true,
-              "exported_namespace": true,
-              "instance": true,
-              "job": true,
-              "namespace": true,
-              "pod": true,
-              "service": true,
-              "status": true
+              "Time": true, "__name__": true,
+              "container": true, "endpoint": true, "exported_namespace": true,
+              "instance": true, "job": true, "namespace": true,
+              "pod": true, "service": true, "status": true
             },
-            "indexByName": {
-              "vcluster": 0,
-              "check": 1,
-              "Value": 2,
-              "error": 3
-            }
+            "indexByName": {"env": 0, "check": 1, "Value": 2, "error": 3}
           }
         }
       ],
       "targets": [
         {
-          "expr": "kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\"}",
+          "expr": "kuberhealthy_check{job=~\"kuberhealthy.*\",env=~\"$env\"}",
           "instant": true,
-          "legendFormat": "{{vcluster}} / {{check}}"
+          "legendFormat": "{{env}} / {{check}}"
         }
       ]
+    },
+
+    {
+      "type": "row",
+      "id": 8,
+      "title": "Timeline",
+      "collapsed": false,
+      "gridPos": {"x": 0, "y": 25, "w": 24, "h": 1},
+      "panels": []
     },
     {
       "type": "state-timeline",
       "id": 11,
       "title": "Gateway State Timeline",
-      "gridPos": {"x": 0, "y": 16, "w": 24, "h": 10},
+      "gridPos": {"x": 0, "y": 26, "w": 24, "h": 10},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "options": {
         "mergeValues": true,
-        "showValue": "auto",
+        "showValue": "never",
         "alignValue": "left",
-        "rowHeight": 0.85,
+        "rowHeight": 0.8,
         "legend": {"displayMode": "list", "placement": "bottom"}
       },
       "fieldConfig": {
@@ -221,39 +275,37 @@
       },
       "targets": [
         {
-          "expr": "kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\"}",
-          "legendFormat": "{{vcluster}} / {{check}}"
+          "expr": "kuberhealthy_check{job=~\"kuberhealthy.*\",env=~\"$env\"}",
+          "legendFormat": "{{check}}"
         }
       ]
     },
+
     {
       "type": "row",
-      "id": 8,
+      "id": 15,
       "title": "Trends",
       "collapsed": false,
-      "gridPos": {"x": 0, "y": 26, "w": 24, "h": 1},
+      "gridPos": {"x": 0, "y": 36, "w": 24, "h": 1},
       "panels": []
     },
     {
       "type": "timeseries",
       "id": 9,
-      "title": "Pass Rate % by vCluster",
-      "gridPos": {"x": 0, "y": 27, "w": 12, "h": 8},
+      "title": "Pass Rate % by Environment",
+      "gridPos": {"x": 0, "y": 37, "w": 12, "h": 8},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "max": 100,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "orange", "value": 80}, {"color": "green", "value": 100}]},
+          "unit": "percent", "min": 0, "max": 100,
           "custom": {"lineWidth": 2, "fillOpacity": 10}
         }
       },
       "targets": [
         {
-          "expr": "100 * count by(vcluster)(kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\",status=\"1\"}) / count by(vcluster)(kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\"})",
-          "legendFormat": "{{vcluster}}"
+          "expr": "100 * count by(env)(kuberhealthy_check{job=~\"kuberhealthy.*\",env=~\"$env\",status=\"1\"}) / count by(env)(kuberhealthy_check{job=~\"kuberhealthy.*\",env=~\"$env\"})",
+          "legendFormat": "{{env}}"
         }
       ]
     },
@@ -261,23 +313,23 @@
       "type": "timeseries",
       "id": 10,
       "title": "Failing Checks Over Time",
-      "gridPos": {"x": 12, "y": 27, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 37, "w": 12, "h": 8},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "min": 0,
+          "unit": "short", "min": 0,
           "custom": {"lineWidth": 2, "fillOpacity": 10},
           "color": {"mode": "fixed", "fixedColor": "red"}
         }
       },
       "targets": [
         {
-          "expr": "count by(vcluster)(kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\",status=\"0\"})",
-          "legendFormat": "{{vcluster}}"
+          "expr": "count by(env)(kuberhealthy_check{job=~\"kuberhealthy.*\",env=~\"$env\",status=\"0\"})",
+          "legendFormat": "{{env}}"
         }
       ]
     }
+
   ]
 }
