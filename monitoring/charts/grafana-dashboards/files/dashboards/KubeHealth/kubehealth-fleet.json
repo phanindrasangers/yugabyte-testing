@@ -1,9 +1,9 @@
 {
   "uid": "kubehealth-fleet",
-  "title": "KubeHealth · Check Fleet (All vClusters)",
-  "tags": ["kubehealth", "health", "fleet"],
+  "title": "KubeHealth · Gateway Check Fleet",
+  "tags": ["kubehealth", "health", "gateway"],
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": true,
   "graphTooltip": 1,
   "refresh": "30s",
@@ -27,38 +27,8 @@
         "name": "vcluster",
         "label": "vCluster",
         "datasource": {"type": "prometheus", "uid": "${datasource}"},
-        "query": "label_values(kuberhealthy_check{job=\"kuberhealthy\"}, vcluster)",
-        "definition": "label_values(kuberhealthy_check{job=\"kuberhealthy\"}, vcluster)",
-        "refresh": 2,
-        "sort": 1,
-        "hide": 0,
-        "multi": true,
-        "includeAll": true,
-        "current": {},
-        "allValue": ".*"
-      },
-      {
-        "type": "query",
-        "name": "env",
-        "label": "Environment",
-        "datasource": {"type": "prometheus", "uid": "${datasource}"},
-        "query": "label_values(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\"}, env)",
-        "definition": "label_values(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\"}, env)",
-        "refresh": 2,
-        "sort": 1,
-        "hide": 0,
-        "multi": true,
-        "includeAll": true,
-        "current": {},
-        "allValue": ".*"
-      },
-      {
-        "type": "query",
-        "name": "namespace",
-        "label": "Namespace",
-        "datasource": {"type": "prometheus", "uid": "${datasource}"},
-        "query": "label_values(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\"}, namespace)",
-        "definition": "label_values(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\"}, namespace)",
+        "query": "label_values(kuberhealthy_check{job=~\"kuberhealthy.*\"}, vcluster)",
+        "definition": "label_values(kuberhealthy_check{job=~\"kuberhealthy.*\"}, vcluster)",
         "refresh": 2,
         "sort": 1,
         "hide": 0,
@@ -74,7 +44,7 @@
     {
       "type": "row",
       "id": 1,
-      "title": "Fleet health",
+      "title": "Summary",
       "collapsed": false,
       "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
       "panels": []
@@ -85,11 +55,11 @@
       "title": "Total Checks",
       "gridPos": {"x": 0, "y": 1, "w": 6, "h": 4},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
-      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "none", "graphMode": "none", "textMode": "auto"},
-      "fieldConfig": {"defaults": {"color": {"mode": "fixed", "fixedColor": "text"}, "unit": "short"}},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "none", "graphMode": "none"},
+      "fieldConfig": {"defaults": {"unit": "short", "color": {"mode": "fixed", "fixedColor": "text"}}},
       "targets": [
         {
-          "expr": "count(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"})",
+          "expr": "count(kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\"})",
           "instant": true,
           "legendFormat": ""
         }
@@ -111,7 +81,7 @@
       },
       "targets": [
         {
-          "expr": "sum(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"} == 1) or vector(0)",
+          "expr": "count(kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\",status=\"1\"}) or vector(0)",
           "instant": true,
           "legendFormat": ""
         }
@@ -133,7 +103,7 @@
       },
       "targets": [
         {
-          "expr": "sum(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"} == 0) or vector(0)",
+          "expr": "count(kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\",status=\"0\"}) or vector(0)",
           "instant": true,
           "legendFormat": ""
         }
@@ -149,14 +119,14 @@
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
+          "decimals": 1,
           "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "orange", "value": 80}, {"color": "green", "value": 100}]},
-          "color": {"mode": "thresholds"},
-          "decimals": 1
+          "color": {"mode": "thresholds"}
         }
       },
       "targets": [
         {
-          "expr": "100 * sum(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}) / count(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"})",
+          "expr": "100 * count(kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\",status=\"1\"}) / count(kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\"})",
           "instant": true,
           "legendFormat": ""
         }
@@ -173,26 +143,47 @@
     {
       "type": "table",
       "id": 7,
-      "title": "All Checks",
-      "gridPos": {"x": 0, "y": 6, "w": 24, "h": 10},
+      "title": "Gateway Health — All Checks",
+      "gridPos": {"x": 0, "y": 6, "w": 24, "h": 12},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "options": {"sortBy": [{"displayName": "Status", "desc": false}]},
       "fieldConfig": {
         "defaults": {
-          "custom": {"align": "left", "displayMode": "auto"},
-          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+          "custom": {"align": "left", "displayMode": "auto"}
         },
         "overrides": [
           {
             "matcher": {"id": "byName", "options": "Status"},
             "properties": [
               {"id": "custom.displayMode", "value": "color-background"},
-              {"id": "color", "value": {"mode": "thresholds"}},
+              {"id": "custom.width", "value": 90},
               {"id": "mappings", "value": [
-                {"type": "value", "options": {"0": {"text": "FAIL", "color": "red", "index": 0}, "1": {"text": "PASS", "color": "green", "index": 1}}}
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {"text": "FAIL", "color": "red", "index": 0},
+                    "1": {"text": "PASS", "color": "green", "index": 1}
+                  }
+                }
               ]},
-              {"id": "custom.width", "value": 80}
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}},
+              {"id": "color", "value": {"mode": "thresholds"}}
             ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Error"},
+            "properties": [
+              {"id": "custom.width", "value": 500},
+              {"id": "custom.displayMode", "value": "auto"}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "vCluster"},
+            "properties": [{"id": "custom.width", "value": 180}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Check"},
+            "properties": [{"id": "custom.width", "value": 200}]
           },
           {
             "matcher": {"id": "byName", "options": "Time"},
@@ -208,16 +199,39 @@
         {
           "id": "organize",
           "options": {
-            "renameByName": {"vcluster": "vCluster", "namespace": "Namespace", "env": "Env", "check": "Check", "Value": "Status"},
-            "excludeByName": {"__name__": true, "container": true, "instance": true, "job": true, "pod": true, "exported_namespace": true}
+            "renameByName": {
+              "vcluster": "vCluster",
+              "check": "Check",
+              "error": "Error",
+              "Value": "Status"
+            },
+            "excludeByName": {
+              "__name__": true,
+              "container": true,
+              "endpoint": true,
+              "exported_namespace": true,
+              "instance": true,
+              "job": true,
+              "namespace": true,
+              "pod": true,
+              "service": true,
+              "env": true,
+              "status": true
+            },
+            "indexByName": {
+              "vcluster": 0,
+              "check": 1,
+              "Value": 2,
+              "error": 3
+            }
           }
         }
       ],
       "targets": [
         {
-          "expr": "kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}",
+          "expr": "kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\"}",
           "instant": true,
-          "legendFormat": "{{vcluster}}/{{namespace}}/{{check}}"
+          "legendFormat": "{{vcluster}}/{{check}}"
         }
       ]
     },
@@ -226,14 +240,14 @@
       "id": 8,
       "title": "Trends",
       "collapsed": false,
-      "gridPos": {"x": 0, "y": 16, "w": 24, "h": 1},
+      "gridPos": {"x": 0, "y": 18, "w": 24, "h": 1},
       "panels": []
     },
     {
       "type": "timeseries",
       "id": 9,
-      "title": "Pass Rate % by Namespace",
-      "gridPos": {"x": 0, "y": 17, "w": 16, "h": 8},
+      "title": "Pass Rate % by vCluster",
+      "gridPos": {"x": 0, "y": 19, "w": 12, "h": 8},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
       "fieldConfig": {
@@ -247,28 +261,31 @@
       },
       "targets": [
         {
-          "expr": "100 * sum by (vcluster,namespace)(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}) / count by (vcluster,namespace)(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"})",
-          "legendFormat": "{{vcluster}}/{{namespace}}"
+          "expr": "100 * count by(vcluster)(kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\",status=\"1\"}) / count by(vcluster)(kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\"})",
+          "legendFormat": "{{vcluster}}"
         }
       ]
     },
     {
       "type": "timeseries",
       "id": 10,
-      "title": "Check Duration (seconds)",
-      "gridPos": {"x": 16, "y": 17, "w": 8, "h": 8},
+      "title": "Failing Checks Over Time",
+      "gridPos": {"x": 12, "y": 19, "w": 12, "h": 8},
       "datasource": {"type": "prometheus", "uid": "${datasource}"},
       "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
-          "custom": {"lineWidth": 1, "fillOpacity": 5}
+          "unit": "short",
+          "min": 0,
+          "custom": {"lineWidth": 2, "fillOpacity": 10},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]},
+          "color": {"mode": "fixed", "fixedColor": "red"}
         }
       },
       "targets": [
         {
-          "expr": "kuberhealthy_check_duration_seconds{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}",
-          "legendFormat": "{{namespace}}/{{check}}"
+          "expr": "count by(vcluster)(kuberhealthy_check{job=~\"kuberhealthy.*\",vcluster=~\"$vcluster\",status=\"0\"})",
+          "legendFormat": "{{vcluster}}"
         }
       ]
     }
