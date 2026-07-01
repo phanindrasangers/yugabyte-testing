@@ -1,0 +1,276 @@
+{
+  "uid": "kubehealth-fleet",
+  "title": "KubeHealth · Check Fleet (All vClusters)",
+  "tags": ["kubehealth", "health", "fleet"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "30s",
+  "time": {"from": "now-3h", "to": "now"},
+  "timezone": "",
+  "templating": {
+    "list": [
+      {
+        "type": "datasource",
+        "name": "datasource",
+        "label": "Data source",
+        "query": "prometheus",
+        "refresh": 1,
+        "hide": 0,
+        "current": {},
+        "multi": false,
+        "includeAll": false
+      },
+      {
+        "type": "query",
+        "name": "vcluster",
+        "label": "vCluster",
+        "datasource": {"type": "prometheus", "uid": "${datasource}"},
+        "query": "label_values(kuberhealthy_check{job=\"kuberhealthy\"}, vcluster)",
+        "definition": "label_values(kuberhealthy_check{job=\"kuberhealthy\"}, vcluster)",
+        "refresh": 2,
+        "sort": 1,
+        "hide": 0,
+        "multi": true,
+        "includeAll": true,
+        "current": {},
+        "allValue": ".*"
+      },
+      {
+        "type": "query",
+        "name": "env",
+        "label": "Environment",
+        "datasource": {"type": "prometheus", "uid": "${datasource}"},
+        "query": "label_values(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\"}, env)",
+        "definition": "label_values(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\"}, env)",
+        "refresh": 2,
+        "sort": 1,
+        "hide": 0,
+        "multi": true,
+        "includeAll": true,
+        "current": {},
+        "allValue": ".*"
+      },
+      {
+        "type": "query",
+        "name": "namespace",
+        "label": "Namespace",
+        "datasource": {"type": "prometheus", "uid": "${datasource}"},
+        "query": "label_values(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\"}, namespace)",
+        "definition": "label_values(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\"}, namespace)",
+        "refresh": 2,
+        "sort": 1,
+        "hide": 0,
+        "multi": true,
+        "includeAll": true,
+        "current": {},
+        "allValue": ".*"
+      }
+    ]
+  },
+  "annotations": {"list": [{"builtIn": 1, "type": "dashboard", "hide": true, "datasource": {"type": "grafana", "uid": "-- Grafana --"}, "name": "Annotations & Alerts", "iconColor": "rgba(0,211,255,1)"}]},
+  "panels": [
+    {
+      "type": "row",
+      "id": 1,
+      "title": "Fleet health",
+      "collapsed": false,
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "id": 2,
+      "title": "Total Checks",
+      "gridPos": {"x": 0, "y": 1, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "none", "graphMode": "none", "textMode": "auto"},
+      "fieldConfig": {"defaults": {"color": {"mode": "fixed", "fixedColor": "text"}, "unit": "short"}},
+      "targets": [
+        {
+          "expr": "count(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"})",
+          "instant": true,
+          "legendFormat": ""
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 3,
+      "title": "Passing",
+      "gridPos": {"x": 6, "y": 1, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]},
+          "color": {"mode": "thresholds"}
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"} == 1) or vector(0)",
+          "instant": true,
+          "legendFormat": ""
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 4,
+      "title": "Failing",
+      "gridPos": {"x": 12, "y": 1, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]},
+          "color": {"mode": "thresholds"}
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"} == 0) or vector(0)",
+          "instant": true,
+          "legendFormat": ""
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "id": 5,
+      "title": "Pass Rate",
+      "gridPos": {"x": 18, "y": 1, "w": 6, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "orange", "value": 80}, {"color": "green", "value": 100}]},
+          "color": {"mode": "thresholds"},
+          "decimals": 1
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 * sum(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}) / count(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"})",
+          "instant": true,
+          "legendFormat": ""
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "id": 6,
+      "title": "Check Status",
+      "collapsed": false,
+      "gridPos": {"x": 0, "y": 5, "w": 24, "h": 1},
+      "panels": []
+    },
+    {
+      "type": "table",
+      "id": 7,
+      "title": "All Checks",
+      "gridPos": {"x": 0, "y": 6, "w": 24, "h": 10},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "options": {"sortBy": [{"displayName": "Status", "desc": false}]},
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "left", "displayMode": "auto"},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Status"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "color", "value": {"mode": "thresholds"}},
+              {"id": "mappings", "value": [
+                {"type": "value", "options": {"0": {"text": "FAIL", "color": "red", "index": 0}, "1": {"text": "PASS", "color": "green", "index": 1}}}
+              ]},
+              {"id": "custom.width", "value": 80}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Time"},
+            "properties": [{"id": "custom.hidden", "value": true}]
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {"mode": "columns", "valueLabel": "Status"}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {"vcluster": "vCluster", "namespace": "Namespace", "env": "Env", "check": "Check", "Value": "Status"},
+            "excludeByName": {"__name__": true, "container": true, "instance": true, "job": true, "pod": true, "exported_namespace": true}
+          }
+        }
+      ],
+      "targets": [
+        {
+          "expr": "kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}",
+          "instant": true,
+          "legendFormat": "{{vcluster}}/{{namespace}}/{{check}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "id": 8,
+      "title": "Trends",
+      "collapsed": false,
+      "gridPos": {"x": 0, "y": 16, "w": 24, "h": 1},
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "id": 9,
+      "title": "Pass Rate % by Namespace",
+      "gridPos": {"x": 0, "y": 17, "w": 16, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "orange", "value": 80}, {"color": "green", "value": 100}]},
+          "custom": {"lineWidth": 2, "fillOpacity": 10}
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 * sum by (vcluster,namespace)(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}) / count by (vcluster,namespace)(kuberhealthy_check{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"})",
+          "legendFormat": "{{vcluster}}/{{namespace}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 10,
+      "title": "Check Duration (seconds)",
+      "gridPos": {"x": 16, "y": 17, "w": 8, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {"lineWidth": 1, "fillOpacity": 5}
+        }
+      },
+      "targets": [
+        {
+          "expr": "kuberhealthy_check_duration_seconds{job=\"kuberhealthy\",vcluster=~\"$vcluster\",env=~\"$env\",namespace=~\"$namespace\"}",
+          "legendFormat": "{{namespace}}/{{check}}"
+        }
+      ]
+    }
+  ]
+}

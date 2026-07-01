@@ -1,0 +1,39 @@
+# ServiceMonitor for Kuberhealthy running inside vClusters (host-level Prometheus)
+# Kuberhealthy pods are synced to host namespaces with -x- naming, same as YugabyteDB.
+# Default kuberhealthy port: 8080 (port name: http).
+# Adjust matchLabels and port name to match your kuberhealthy Helm chart values.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kuberhealthy-vcluster-host
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [cbg-demo, cbg-test, cbg-dev]   # host ns = vcluster names
+  selector:
+    matchLabels:
+      app: kuberhealthy                           # label preserved by vCluster sync
+  endpoints:
+    - port: http                                  # kuberhealthy default port name
+      path: /metrics
+      interval: 30s
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: vcluster
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: env
+        - sourceLabels: [__meta_kubernetes_service_name]
+          regex: '(.+?)-x-(.+)-x-(.+)'
+          targetLabel: namespace
+          replacement: '$2'
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          regex: '(.+?)-x-(.+)-x-(.+)'
+          targetLabel: pod
+          replacement: '$1'
+      metricRelabelings:
+        # keep only check status and duration metrics; drop internal kuberhealthy debug metrics
+        - sourceLabels: [__name__]
+          regex: 'kuberhealthy_(check|check_duration_seconds|running)'
+          action: keep
